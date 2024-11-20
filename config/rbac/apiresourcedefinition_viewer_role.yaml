@@ -1,0 +1,23 @@
+# permissions for end users to view apiresourcedefinitions.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: tmp
+    app.kubernetes.io/managed-by: kustomize
+  name: apiresourcedefinition-viewer-role
+rules:
+- apiGroups:
+  - api.kovo.li
+  resources:
+  - apiresourcedefinitions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - api.kovo.li
+  resources:
+  - apiresourcedefinitions/status
+  verbs:
+  - get

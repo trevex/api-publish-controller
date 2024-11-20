@@ -1,0 +1,9 @@
+apiVersion: api.kovo.li/v1alpha1
+kind: ClusterAPIGroup
+metadata:
+  labels:
+    app.kubernetes.io/name: tmp
+    app.kubernetes.io/managed-by: kustomize
+  name: clusterapigroup-sample
+spec:
+  # TODO(user): Add fields here

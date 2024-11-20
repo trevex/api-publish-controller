@@ -1,0 +1,6 @@
+## Append samples of your project ##
+resources:
+- api_v1alpha1_apigrouprequest.yaml
+- api_v1alpha1_clusterapigroup.yaml
+- api_v1alpha1_apiresourcedefinition.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

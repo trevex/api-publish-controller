@@ -1,0 +1,27 @@
+# permissions for end users to edit apigrouprequests.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: tmp
+    app.kubernetes.io/managed-by: kustomize
+  name: apigrouprequest-editor-role
+rules:
+- apiGroups:
+  - api.kovo.li
+  resources:
+  - apigrouprequests
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - api.kovo.li
+  resources:
+  - apigrouprequests/status
+  verbs:
+  - get

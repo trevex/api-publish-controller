@@ -1,0 +1,23 @@
+# permissions for end users to view clusterapigroups.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: tmp
+    app.kubernetes.io/managed-by: kustomize
+  name: clusterapigroup-viewer-role
+rules:
+- apiGroups:
+  - api.kovo.li
+  resources:
+  - clusterapigroups
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - api.kovo.li
+  resources:
+  - clusterapigroups/status
+  verbs:
+  - get

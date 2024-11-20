@@ -1,0 +1,9 @@
+apiVersion: api.kovo.li/v1alpha1
+kind: APIResourceDefinition
+metadata:
+  labels:
+    app.kubernetes.io/name: tmp
+    app.kubernetes.io/managed-by: kustomize
+  name: apiresourcedefinition-sample
+spec:
+  # TODO(user): Add fields here

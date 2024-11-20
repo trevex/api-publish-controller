@@ -1,0 +1,49 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.4
+  name: clusterapigroups.api.kovo.li
+spec:
+  group: api.kovo.li
+  names:
+    kind: ClusterAPIGroup
+    listKind: ClusterAPIGroupList
+    plural: clusterapigroups
+    singular: clusterapigroup
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ClusterAPIGroup is the Schema for the clusterapigroups API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ClusterAPIGroupSpec defines the desired state of ClusterAPIGroup.
+            type: object
+          status:
+            description: ClusterAPIGroupStatus defines the observed state of ClusterAPIGroup.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
