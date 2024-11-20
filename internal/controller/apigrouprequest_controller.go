@@ -24,6 +24,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/pkg/errors"
+	"github.com/trevex/api-publish-controller/api/v1alpha1"
 	apiv1alpha1 "github.com/trevex/api-publish-controller/api/v1alpha1"
 )
 
@@ -51,6 +53,35 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// TODO:
 	// Is Request being deleted, delete ClusterAPIGroup AND related API RD!
+	agr := &v1alpha1.APIGroupRequest{}
+	if err := r.Get(ctx, req.NamespacedName, agr); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return ctrl.Result{}, errors.Wrap(err, "Could not get APIGroupRequest")
+		}
+		return ctrl.Result{}, nil
+	}
+
+	cagr := &v1alpha1.ClusterAPIGroup{}
+	if err := r.Get(ctx, client.ObjectKey{Name: agr.Name}, cagr); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return ctrl.Result{}, errors.Wrap(err, "Could not get ClusterAPIGroup")
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if agr.DeletionTimestamp != nil {
+
+		client.Object.SetFinalizers(agr, []string{})
+		if err := r.Delete(ctx, agr); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "Could not delete APIGroupRequest")
+		}
+
+		client.Object.SetFinalizers(cagr, []string{})
+		if err := r.Delete(ctx, cagr); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "Could not delete ClusterAPIGroup")
+		}
+	}
+
 	// Does current Request already own an APIGroup, if so check existence.
 	// Tries to create ClusterAPIGroup for Request
 	// If not exists, create! Make sure Request "OWNS" ClusterAPIGroup
