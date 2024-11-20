@@ -18,13 +18,17 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	kcpv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/apis/v1alpha1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1alpha1 "github.com/trevex/api-publish-controller/api/v1alpha1"
@@ -32,26 +36,48 @@ import (
 
 var _ = Describe("APIResourceDefinition Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const resourceName = "shirts.stable.example.com"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
-		apiresourcedefinition := &apiv1alpha1.APIResourceDefinition{}
+		ard := &apiv1alpha1.APIResourceDefinition{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind APIResourceDefinition")
-			err := k8sClient.Get(ctx, typeNamespacedName, apiresourcedefinition)
+			err := k8sClient.Get(ctx, typeNamespacedName, ard)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &apiv1alpha1.APIResourceDefinition{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: kcpv1alpha1.APIResourceSchemaSpec{
+						Group: "stable.example.com",
+						Scope: apiextensionsv1.NamespaceScoped,
+						Names: apiextensionsv1.CustomResourceDefinitionNames{
+							Plural:   "shirts",
+							Singular: "shirt",
+							Kind:     "Shirt",
+						},
+						Versions: []kcpv1alpha1.APIResourceVersion{
+							{
+								Name:    "v1",
+								Served:  true,
+								Storage: true,
+								Schema: runtime.RawExtension{
+									Raw: jsonOrDie(
+										&apiextensionsv1.JSONSchemaProps{
+											Type: "object",
+										},
+									),
+								},
+							},
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -63,11 +89,11 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance APIResourceDefinition")
+			By("cleanup the specific resource instance APIResourceDefinition")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
+			By("reconciling the created resource")
 			controllerReconciler := &APIResourceDefinitionReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
@@ -82,3 +108,12 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 		})
 	})
 })
+
+func jsonOrDie(obj interface{}) []byte {
+	ret, err := json.Marshal(obj)
+	if err != nil {
+		panic(err)
+	}
+
+	return ret
+}
