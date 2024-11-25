@@ -19,14 +19,15 @@ package controller
 import (
 	"context"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/pkg/errors"
-	"github.com/trevex/api-publish-controller/api/v1alpha1"
 	apiv1alpha1 "github.com/trevex/api-publish-controller/api/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // APIGroupRequestReconciler reconciles a APIGroupRequest object
@@ -49,39 +50,48 @@ type APIGroupRequestReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
-	// TODO:
+	finalizerName := "api.kovi.li/finalizer"
+
 	// Is Request being deleted, delete ClusterAPIGroup AND related API RD!
-	agr := &v1alpha1.APIGroupRequest{}
+	// Q: Should we really delete all API RD's when removing the APIGroupRequest?
+	//		Maybe its better to deny the delete request until the user removes the related API RDs manually to prevent accidental deletion.
+	//		Current solution does not include the API RD deletion for now.
+	agr := &apiv1alpha1.APIGroupRequest{}
 	if err := r.Get(ctx, req.NamespacedName, agr); err != nil {
-		if client.IgnoreNotFound(err) != nil {
+		if !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, errors.Wrap(err, "Could not get APIGroupRequest")
-		}
-		return ctrl.Result{}, nil
-	}
-
-	cagr := &v1alpha1.ClusterAPIGroup{}
-	if err := r.Get(ctx, client.ObjectKey{Name: agr.Name}, cagr); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			return ctrl.Result{}, errors.Wrap(err, "Could not get ClusterAPIGroup")
 		}
 		return ctrl.Result{}, nil
 	}
 
 	if agr.DeletionTimestamp != nil {
 
-		client.Object.SetFinalizers(agr, []string{})
+		logger.Info("deleting resource", "APIGroupRequest", agr)
+
+		cagr := &apiv1alpha1.ClusterAPIGroup{}
+		if err := r.Get(ctx, client.ObjectKey{Name: agr.Name}, cagr); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return ctrl.Result{}, errors.Wrap(err, "Could not get ClusterAPIGroup")
+			}
+			// ClusterAPIGroup has not been found
+		} else {
+			// ClusterAPIGroup has been found
+			if err := r.Delete(ctx, cagr); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "Could not delete ClusterAPIGroup")
+			}
+		}
+
+		// Removing finalizer from APIGroupRequest and deleting it
+		// Q: Should we check beforehand, if finalizer exists? Current solution expects finalizer to be there.
+		controllerutil.RemoveFinalizer(agr, finalizerName)
 		if err := r.Delete(ctx, agr); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "Could not delete APIGroupRequest")
 		}
-
-		client.Object.SetFinalizers(cagr, []string{})
-		if err := r.Delete(ctx, cagr); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "Could not delete ClusterAPIGroup")
-		}
 	}
 
+	// TODO:
 	// Does current Request already own an APIGroup, if so check existence.
 	// Tries to create ClusterAPIGroup for Request
 	// If not exists, create! Make sure Request "OWNS" ClusterAPIGroup
