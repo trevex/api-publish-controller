@@ -33,7 +33,8 @@ type APIGroupRequestSpec struct {
 type APIGroupRequestStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Approved bool `json:"approved,omitempty"`
+	Approved   bool               `json:"approved,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
