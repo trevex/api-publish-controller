@@ -74,13 +74,19 @@ var _ = Describe("APIGroupRequest Controller", func() {
 		// AfterEach block is not needed in this context, as the resources should be cleaned up during this spec
 
 		It("should successfully detect the deleted resources", func() {
+
+			By("deleting the resource")
+			err := k8sClient.Get(ctx, typeNamespacedName, apiGroupRequest)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(k8sClient.Delete(ctx, apiGroupRequest)).To(Succeed())
+
 			By("reconciling the created resource")
 			controllerReconciler := &APIGroupRequestReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
