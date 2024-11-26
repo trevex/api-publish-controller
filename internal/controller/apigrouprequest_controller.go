@@ -106,9 +106,7 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		// Q: Should we check beforehand, if finalizer exists? Current solution expects finalizer to be there.
 		logger.Info("removing finalizer", "APIGroupRequest", agr.Name)
 		controllerutil.RemoveFinalizer(agr, finalizerName)
-		if err := r.Delete(ctx, agr); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "Could not delete APIGroupRequest")
-		}
+		r.Update(ctx, agr)
 	}
 
 	// TODO:
