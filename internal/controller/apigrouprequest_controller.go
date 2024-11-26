@@ -36,6 +36,8 @@ type APIGroupRequestReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+var finalizerName = "api.kovi.li/finalizer"
+
 // +kubebuilder:rbac:groups=api.kovo.li,resources=apigrouprequests,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=api.kovo.li,resources=apigrouprequests/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=api.kovo.li,resources=apigrouprequests/finalizers,verbs=update
@@ -51,8 +53,7 @@ type APIGroupRequestReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-
-	finalizerName := "api.kovi.li/finalizer"
+	logger.Info("starting reconciliation loop")
 
 	// Is Request being deleted, delete ClusterAPIGroup AND related API RD!
 	// Q: Should we really delete all API RD's when removing the APIGroupRequest?
@@ -85,6 +86,7 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			if !apierrors.IsNotFound(err) {
 				return ctrl.Result{}, errors.Wrap(err, "Could not get ClusterAPIGroup")
 			}
+			logger.Info("no ClusterAPIGroup has been found")
 			// ClusterAPIGroup has not been found
 		} else {
 			// ClusterAPIGroup has been found
@@ -102,6 +104,7 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		// Removing finalizer from APIGroupRequest and deleting it
 		// Q: Should we check beforehand, if finalizer exists? Current solution expects finalizer to be there.
+		logger.Info("removing finalizer", "APIGroupRequest", agr.Name)
 		controllerutil.RemoveFinalizer(agr, finalizerName)
 		if err := r.Delete(ctx, agr); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "Could not delete APIGroupRequest")
