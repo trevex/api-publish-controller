@@ -33,12 +33,16 @@ import (
 
 var _ = Describe("APIGroupRequest Controller", func() {
 
-	const resourceName = "test-apigroup"
-	const clusterApiGroupName = "test-clusterapigroup"
+	const (
+		resourceName        = "test-apigroup"
+		clusterApiGroupName = "test-clusterapigroup"
+	)
+
 	typeNamespacedName := types.NamespacedName{
 		Name:      resourceName,
 		Namespace: "default",
 	}
+
 	apiGroupRequest := &apiv1alpha1.APIGroupRequest{}
 	clusterApiGroup := &apiv1alpha1.ClusterAPIGroup{}
 
@@ -50,24 +54,21 @@ var _ = Describe("APIGroupRequest Controller", func() {
 			By("creating the custom resource for the Kind APIGroupRequest")
 			err := k8sClient.Get(ctx, typeNamespacedName, apiGroupRequest)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &apiv1alpha1.APIGroupRequest{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
+				apiGroupRequest.ObjectMeta = metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
 				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+				Expect(controllerutil.AddFinalizer(apiGroupRequest, finalizerName)).To(BeTrue())
+				Expect(k8sClient.Create(ctx, apiGroupRequest)).To(Succeed())
 			}
 			By("creating the custom resource for the Kind ClusterAPIGroup")
 			err = k8sClient.Get(ctx, typeNamespacedName, clusterApiGroup)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &apiv1alpha1.ClusterAPIGroup{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: clusterApiGroupName,
-					},
+				clusterApiGroup.ObjectMeta = metav1.ObjectMeta{
+					Name: clusterApiGroupName,
 				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 				Expect(controllerutil.SetOwnerReference(apiGroupRequest, clusterApiGroup, k8sClient.Scheme())).To(Succeed())
+				Expect(k8sClient.Create(ctx, clusterApiGroup)).To(Succeed())
 			}
 		})
 
