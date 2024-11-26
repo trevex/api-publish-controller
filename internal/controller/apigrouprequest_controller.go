@@ -66,9 +66,19 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
+	// not sure if this is needed when setting an OwnerReference, saving for potential later use:
+	//
+	// controller := true
+	// ownerReference := metav1.OwnerReference{
+	// 	APIVersion: agr.APIVersion,
+	// 	Kind:       agr.Kind,
+	// 	Name:       req.Name,
+	// 	Controller: &controller,
+	// }
+
 	if agr.DeletionTimestamp != nil {
 
-		logger.Info("deleting resource", "APIGroupRequest", agr)
+		logger.Info("deleting resource", "APIGroupRequest", agr.Name)
 
 		cagr := &apiv1alpha1.ClusterAPIGroup{}
 		if err := r.Get(ctx, client.ObjectKey{Name: agr.Name}, cagr); err != nil {
@@ -78,8 +88,15 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// ClusterAPIGroup has not been found
 		} else {
 			// ClusterAPIGroup has been found
-			if err := r.Delete(ctx, cagr); err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "Could not delete ClusterAPIGroup")
+			owned, err := HasOwnerReference(cagr.OwnerReferences, agr, r.Scheme)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "Unable to check OwnerReference")
+			}
+			if owned {
+				logger.Info("deleting owned resource", "ClusterAPIGroup", cagr.Name)
+				if err := r.Delete(ctx, cagr); err != nil {
+					return ctrl.Result{}, errors.Wrap(err, "Could not delete ClusterAPIGroup")
+				}
 			}
 		}
 
