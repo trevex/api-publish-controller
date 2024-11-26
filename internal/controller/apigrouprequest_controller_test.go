@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,43 +32,49 @@ import (
 )
 
 var _ = Describe("APIGroupRequest Controller", func() {
-	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+
+	const resourceName = "test-apigroup"
+	const clusterApiGroupName = "test-clusterapigroup"
+	typeNamespacedName := types.NamespacedName{
+		Name:      resourceName,
+		Namespace: "default",
+	}
+	apiGroupRequest := &apiv1alpha1.APIGroupRequest{}
+	clusterApiGroup := &apiv1alpha1.ClusterAPIGroup{}
+
+	Context("reconciling a resource marked for deletion", func() {
 
 		ctx := context.Background()
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
-		}
-		apigrouprequest := &apiv1alpha1.APIGroupRequest{}
-
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind APIGroupRequest")
-			err := k8sClient.Get(ctx, typeNamespacedName, apigrouprequest)
+			err := k8sClient.Get(ctx, typeNamespacedName, apiGroupRequest)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &apiv1alpha1.APIGroupRequest{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
+			By("creating the custom resource for the Kind ClusterAPIGroup")
+			err = k8sClient.Get(ctx, typeNamespacedName, clusterApiGroup)
+			if err != nil && errors.IsNotFound(err) {
+				resource := &apiv1alpha1.ClusterAPIGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: clusterApiGroupName,
+					},
+				}
+				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+				Expect(controllerutil.SetOwnerReference(apiGroupRequest, clusterApiGroup, k8sClient.Scheme())).To(Succeed())
+			}
 		})
 
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &apiv1alpha1.APIGroupRequest{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
+		// AfterEach block is not needed in this context, as the resources should be cleaned up during this spec
 
-			By("Cleanup the specific resource instance APIGroupRequest")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
+		It("should successfully detect the deleted resources", func() {
+			By("reconciling the created resource")
 			controllerReconciler := &APIGroupRequestReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
@@ -77,8 +84,60 @@ var _ = Describe("APIGroupRequest Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			By("checking for the ClusterAPIGroup resource")
+			err = k8sClient.Get(ctx, typeNamespacedName, clusterApiGroup)
+			Expect(errors.IsNotFound(err)).To(BeTrue())
+
+			By("checking for the APIGroupRequest resource")
+			err = k8sClient.Get(ctx, typeNamespacedName, apiGroupRequest)
+			Expect(errors.IsNotFound(err)).To(BeTrue())
+
 		})
 	})
+
+	// Context("reconciling a resource ...", func() {
+
+	// 	ctx := context.Background()
+
+	// 	BeforeEach(func() {
+	// 		By("creating the custom resource for the Kind APIGroupRequest")
+	// 		err := k8sClient.Get(ctx, typeNamespacedName, apigrouprequest)
+	// 		if err != nil && errors.IsNotFound(err) {
+	// 			resource := &apiv1alpha1.APIGroupRequest{
+	// 				ObjectMeta: metav1.ObjectMeta{
+	// 					Name:      resourceName,
+	// 					Namespace: "default",
+	// 				},
+	// 				// TODO(user): Specify other spec details if needed.
+	// 			}
+	// 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+	// 		}
+	// 	})
+
+	// 	AfterEach(func() {
+	// 		// TODO(user): Cleanup logic after each test, like removing the resource instance.
+	// 		resource := &apiv1alpha1.APIGroupRequest{}
+	// 		err := k8sClient.Get(ctx, typeNamespacedName, resource)
+	// 		Expect(err).NotTo(HaveOccurred())
+
+	// 		By("Cleanup the specific resource instance APIGroupRequest")
+	// 		Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+	// 	})
+
+	// 	It("should successfully reconcile the resource", func() {
+	// 		By("Reconciling the created resource")
+	// 		controllerReconciler := &APIGroupRequestReconciler{
+	// 			Client: k8sClient,
+	// 			Scheme: k8sClient.Scheme(),
+	// 		}
+
+	// 		_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+	// 			NamespacedName: typeNamespacedName,
+	// 		})
+	// 		Expect(err).NotTo(HaveOccurred())
+	// 		// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
+	// 		// Example: If you expect a certain status condition after reconciliation, verify it here.
+	// 	})
+	// })
 })
