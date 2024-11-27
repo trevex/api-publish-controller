@@ -36,11 +36,12 @@ var _ = Describe("APIGroupRequest Controller", func() {
 	const (
 		resourceName        = "test-apigroup"
 		clusterApiGroupName = "test-clusterapigroup"
+		namespace           = "default"
 	)
 
 	typeNamespacedName := types.NamespacedName{
 		Name:      resourceName,
-		Namespace: "default",
+		Namespace: namespace,
 	}
 
 	apiGroupRequest := &apiv1alpha1.APIGroupRequest{}
@@ -67,7 +68,11 @@ var _ = Describe("APIGroupRequest Controller", func() {
 				clusterApiGroup.ObjectMeta = metav1.ObjectMeta{
 					Name: clusterApiGroupName,
 				}
-				Expect(controllerutil.SetOwnerReference(apiGroupRequest, clusterApiGroup, k8sClient.Scheme())).To(Succeed())
+				annotations := map[string]string{
+					"api.kovo.li/request-name":      resourceName,
+					"api.kovo.li/request-namespace": namespace,
+				}
+				clusterApiGroup.SetAnnotations(annotations)
 				Expect(k8sClient.Create(ctx, clusterApiGroup)).To(Succeed())
 			}
 		})
