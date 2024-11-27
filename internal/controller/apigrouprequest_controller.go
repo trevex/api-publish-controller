@@ -67,6 +67,10 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
+	annotations := map[string]string{
+		"api.kovo.li/request-name":      agr.Name,
+		"api.kovo.li/request-namespace": agr.Namespace,
+	}
 	// not sure if this is needed when setting an OwnerReference, saving for potential later use:
 	//
 	// controller := true
@@ -90,10 +94,8 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// ClusterAPIGroup has not been found
 		} else {
 			// ClusterAPIGroup has been found
-			owned, err := HasOwnerReference(cagr.OwnerReferences, agr, r.Scheme)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "Unable to check OwnerReference")
-			}
+			owned := hasAnnotations(annotations, agr)
+
 			if owned {
 				logger.Info("deleting owned resource", "ClusterAPIGroup", cagr.Name)
 				if err := r.Delete(ctx, cagr); err != nil {
