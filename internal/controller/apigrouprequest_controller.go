@@ -67,53 +67,64 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	annotations := map[string]string{
+	ownerAnnotations := map[string]string{
 		"api.kovo.li/request-name":      agr.Name,
 		"api.kovo.li/request-namespace": agr.Namespace,
 	}
-	// not sure if this is needed when setting an OwnerReference, saving for potential later use:
-	//
-	// controller := true
-	// ownerReference := metav1.OwnerReference{
-	// 	APIVersion: agr.APIVersion,
-	// 	Kind:       agr.Kind,
-	// 	Name:       req.Name,
-	// 	Controller: &controller,
-	// }
 
+	// checking, if corresponding ClusterAPIGroup exists
+	var cagrExists, cagrOwned bool
+	cagr := &apiv1alpha1.ClusterAPIGroup{}
+	if err := r.Get(ctx, client.ObjectKey{Name: agr.Name}, cagr); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, errors.Wrap(err, "could not get ClusterAPIGroup")
+		}
+		logger.Info("no ClusterAPIGroup has been found")
+		// ClusterAPIGroup has not been found
+		cagrExists = false
+	} else {
+		// ClusterAPIGroup has been found
+		cagrExists = true
+		cagrOwned = hasAnnotations(ownerAnnotations, agr)
+	}
+
+	// Handling resources marked for deletion
 	if agr.DeletionTimestamp != nil {
 
 		logger.Info("deleting resource", "APIGroupRequest", agr.Name)
 
-		cagr := &apiv1alpha1.ClusterAPIGroup{}
-		if err := r.Get(ctx, client.ObjectKey{Name: agr.Name}, cagr); err != nil {
-			if !apierrors.IsNotFound(err) {
-				return ctrl.Result{}, errors.Wrap(err, "Could not get ClusterAPIGroup")
-			}
-			logger.Info("no ClusterAPIGroup has been found")
-			// ClusterAPIGroup has not been found
-		} else {
-			// ClusterAPIGroup has been found
-			owned := hasAnnotations(annotations, agr)
-
-			if owned {
-				logger.Info("deleting owned resource", "ClusterAPIGroup", cagr.Name)
-				if err := r.Delete(ctx, cagr); err != nil {
+		// deleting ClusterAPIGroup resource, if it exists and is owned by us
+		if cagrExists && cagrOwned {
+			logger.Info("deleting owned resource", "ClusterAPIGroup", cagr.Name)
+			if err := r.Delete(ctx, cagr); err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "could not delete ClusterAPIGroup")
 			}
 		}
 
 		// Removing finalizer from APIGroupRequest and deleting it
-		// Q: Should we check beforehand, if finalizer exists? Current solution expects finalizer to be there.
 		logger.Info("removing finalizer", "APIGroupRequest", agr.Name)
 		controllerutil.RemoveFinalizer(agr, finalizerName)
 		if err := r.Update(ctx, agr); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "could not update APIGroupRequest")
 		}
+		return ctrl.Result{}, nil
 	}
 
-	// TODO:
+	// APIGroupRequest is not marked for deletion
+
+	// checking, if a finalizer exists on our resource and, if not, add it
+	if !controllerutil.ContainsFinalizer(agr, finalizerName) {
+		controllerutil.AddFinalizer(agr, finalizerName)
+		if err := r.Update(ctx, agr); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "unable to add finalizer to resource")
+		}
+	}
+
+	// Now we check, if a corresponding ClusterAPIGroup for our APIGroupRequest already exists.
+
 	// Does current Request already own an APIGroup, if so check existence.
+
+	// TODO:
 	// Tries to create ClusterAPIGroup for Request
 	// If not exists, create! Make sure Request "OWNS" ClusterAPIGroup
 	// If exists and is not owned by current request, set status "invalid"
