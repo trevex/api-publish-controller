@@ -62,7 +62,7 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	agr := &apiv1alpha1.APIGroupRequest{}
 	if err := r.Get(ctx, req.NamespacedName, agr); err != nil {
 		if !apierrors.IsNotFound(err) {
-			return ctrl.Result{}, errors.Wrap(err, "Could not get APIGroupRequest")
+			return ctrl.Result{}, errors.Wrap(err, "could not get APIGroupRequest")
 		}
 		return ctrl.Result{}, nil
 	}
@@ -99,8 +99,7 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			if owned {
 				logger.Info("deleting owned resource", "ClusterAPIGroup", cagr.Name)
 				if err := r.Delete(ctx, cagr); err != nil {
-					return ctrl.Result{}, errors.Wrap(err, "Could not delete ClusterAPIGroup")
-				}
+				return ctrl.Result{}, errors.Wrap(err, "could not delete ClusterAPIGroup")
 			}
 		}
 
@@ -109,7 +108,7 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		logger.Info("removing finalizer", "APIGroupRequest", agr.Name)
 		controllerutil.RemoveFinalizer(agr, finalizerName)
 		if err := r.Update(ctx, agr); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "Could not update APIGroupRequest")
+			return ctrl.Result{}, errors.Wrap(err, "could not update APIGroupRequest")
 		}
 	}
 
