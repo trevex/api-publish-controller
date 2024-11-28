@@ -44,6 +44,11 @@ var _ = Describe("APIGroupRequest Controller", func() {
 		Namespace: namespace,
 	}
 
+	namespacedNameClusterApiGroup := types.NamespacedName{
+		Name:      clusterApiGroupName,
+		Namespace: namespace,
+	}
+
 	apiGroupRequest := &apiv1alpha1.APIGroupRequest{}
 	clusterApiGroup := &apiv1alpha1.ClusterAPIGroup{}
 
@@ -57,11 +62,15 @@ var _ = Describe("APIGroupRequest Controller", func() {
 			if err != nil && errors.IsNotFound(err) {
 				apiGroupRequest.ObjectMeta = metav1.ObjectMeta{
 					Name:      resourceName,
-					Namespace: "default",
+					Namespace: namespace,
 				}
-				Expect(controllerutil.AddFinalizer(apiGroupRequest, finalizerName)).To(BeTrue())
 				Expect(k8sClient.Create(ctx, apiGroupRequest)).To(Succeed())
 			}
+
+			By("adding a finalizer to the APIGroupRequest resource")
+			Expect(controllerutil.AddFinalizer(apiGroupRequest, finalizerName)).To(BeTrue())
+			Expect(k8sClient.Update(ctx, apiGroupRequest)).To(Succeed())
+
 			By("creating the custom resource for the Kind ClusterAPIGroup")
 			err = k8sClient.Get(ctx, typeNamespacedName, clusterApiGroup)
 			if err != nil && errors.IsNotFound(err) {
@@ -75,16 +84,19 @@ var _ = Describe("APIGroupRequest Controller", func() {
 				clusterApiGroup.SetAnnotations(annotations)
 				Expect(k8sClient.Create(ctx, clusterApiGroup)).To(Succeed())
 			}
+
+			By("deleting the APIGroupRequest resource")
+			Expect(k8sClient.Delete(ctx, apiGroupRequest)).To(Succeed())
+
 		})
 
 		// AfterEach block is not needed in this context, as the resources should be cleaned up during this spec
 
-		It("should successfully detect the deleted resources", func() {
+		It("should successfully reconcile the resources", func() {
 
-			By("deleting the resource")
-			err := k8sClient.Get(ctx, typeNamespacedName, apiGroupRequest)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(k8sClient.Delete(ctx, apiGroupRequest)).To(Succeed())
+			By("checking if needed resources are there")
+			Expect(k8sClient.Get(ctx, namespacedNameClusterApiGroup, clusterApiGroup)).To(Succeed())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, apiGroupRequest)).To(Succeed())
 
 			By("reconciling the created resource")
 			controllerReconciler := &APIGroupRequestReconciler{
@@ -92,7 +104,7 @@ var _ = Describe("APIGroupRequest Controller", func() {
 				Scheme: k8sClient.Scheme(),
 			}
 
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
