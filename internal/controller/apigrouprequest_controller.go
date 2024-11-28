@@ -36,7 +36,11 @@ type APIGroupRequestReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-var finalizerName = "api.kovi.li/finalizer"
+var (
+	finalizerName              = "api.kovi.li/finalizer"
+	requestNameAnnotation      = "api.kovo.li/request-name"
+	requestNamespaceAnnotation = "api.kovo.li/request-namespace"
+)
 
 // +kubebuilder:rbac:groups=api.kovo.li,resources=apigrouprequests,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=api.kovo.li,resources=apigrouprequests/status,verbs=get;update;patch
@@ -53,8 +57,6 @@ var finalizerName = "api.kovi.li/finalizer"
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	requestNameAnnotation := "api.kovo.li/request-name"
-	requestNamespaceAnnotation := "api.kovo.li/request-namespace"
 
 	logger.Info("reconciling resource")
 
@@ -117,6 +119,7 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// checking, if a finalizer exists on our resource and, if not, add it
 	if !controllerutil.ContainsFinalizer(agr, finalizerName) {
+		logger.Info("adding finalizer")
 		controllerutil.AddFinalizer(agr, finalizerName)
 		if err := r.Update(ctx, agr); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "unable to add finalizer to resource")

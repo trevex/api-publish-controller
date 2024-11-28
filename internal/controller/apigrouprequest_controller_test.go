@@ -78,8 +78,8 @@ var _ = Describe("APIGroupRequest Controller", func() {
 					Name: clusterApiGroupName,
 				}
 				annotations := map[string]string{
-					"api.kovo.li/request-name":      resourceName,
-					"api.kovo.li/request-namespace": namespace,
+					requestNameAnnotation:      resourceName,
+					requestNamespaceAnnotation: namespace,
 				}
 				clusterApiGroup.SetAnnotations(annotations)
 				Expect(k8sClient.Create(ctx, clusterApiGroup)).To(Succeed())
