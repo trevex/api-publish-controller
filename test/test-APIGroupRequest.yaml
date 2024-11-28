@@ -1,0 +1,6 @@
+apiVersion: api.kovo.li/v1alpha1
+kind: APIGroupRequest
+metadata:
+  name: testresource
+  finalizers:
+  - api.kovi.li/finalizer
