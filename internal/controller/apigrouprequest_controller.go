@@ -53,7 +53,10 @@ var finalizerName = "api.kovi.li/finalizer"
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	logger.Info("starting reconciliation loop")
+	requestNameAnnotation := "api.kovo.li/request-name"
+	requestNamespaceAnnotation := "api.kovo.li/request-namespace"
+
+	logger.Info("reconciling resource")
 
 	// Is Request being deleted, delete ClusterAPIGroup AND related API RD!
 	// Q: Should we really delete all API RD's when removing the APIGroupRequest?
@@ -68,8 +71,8 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	ownerAnnotations := map[string]string{
-		"api.kovo.li/request-name":      agr.Name,
-		"api.kovo.li/request-namespace": agr.Namespace,
+		requestNameAnnotation:      agr.Name,
+		requestNamespaceAnnotation: agr.Namespace,
 	}
 
 	// checking, if corresponding ClusterAPIGroup exists
