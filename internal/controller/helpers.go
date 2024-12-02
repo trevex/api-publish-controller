@@ -45,17 +45,3 @@ func referSameObject(a, b metav1.OwnerReference) bool {
 	}
 	return aGV.Group == bGV.Group && a.Kind == b.Kind && a.Name == b.Name
 }
-
-// function for checking, if resource has a certain set of annotations
-
-func hasAnnotations(annotations map[string]string, obj client.Object) bool {
-	objAnnotations := obj.GetAnnotations()
-	for k, v := range annotations {
-		if objAnnotations[k] == v {
-			continue
-		} else {
-			return false
-		}
-	}
-	return true
-}
