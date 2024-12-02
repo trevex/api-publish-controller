@@ -21,6 +21,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -72,31 +73,26 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	ownerAnnotations := map[string]string{
-		requestNameAnnotation:      agr.Name,
-		requestNamespaceAnnotation: agr.Namespace,
-	}
-
 	// checking, if corresponding ClusterAPIGroup exists
-	var cagrExists, cagrOwned bool
+	var cagrExists bool
 	cagr := &apiv1alpha1.ClusterAPIGroup{}
 	if err := r.Get(ctx, client.ObjectKey{Name: agr.Name}, cagr); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, errors.Wrap(err, "could not get ClusterAPIGroup")
 		}
-		logger.Info("no ClusterAPIGroup has been found")
+		logger.Info("no resource found", "ClusterAPIGroup", cagr.Name)
 		// ClusterAPIGroup has not been found
 		cagrExists = false
 	} else {
 		// ClusterAPIGroup has been found
 		cagrExists = true
-		cagrOwned = hasAnnotations(ownerAnnotations, agr)
 	}
 
 	// Handling resources marked for deletion
 	if agr.DeletionTimestamp != nil {
 
 		logger.Info("deleting resource", "APIGroupRequest", agr.Name)
+		cagrOwned, _ := isOwned(cagr, req.NamespacedName)
 
 		// deleting ClusterAPIGroup resource, if it exists and is owned by us
 		if cagrExists && cagrOwned {
@@ -127,7 +123,20 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// Now we check, if a corresponding ClusterAPIGroup for our APIGroupRequest already exists.
+	if cagrExists {
+		_, cagrOwnedByOthers := isOwned(cagr, req.NamespacedName)
 
+		// if it exists and is now owned by our APIGroupRequest
+		if cagrOwnedByOthers {
+			owner := getClusterApiGroupOwner(cagr)
+			logger.Info("resource owned by someone else", "ClusterAPIGroup", cagr.Name, "owner name:", owner.Name, "owner namespace:", owner.Namespace)
+
+			// then we update the status of our APIGroupRequest
+			// condition := metav1.Condition{}
+
+		}
+
+	}
 	// Does current Request already own an APIGroup, if so check existence.
 
 	// TODO:
@@ -136,6 +145,47 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// If exists and is not owned by current request, set status "invalid"
 
 	return ctrl.Result{}, nil
+}
+
+func getClusterApiGroupOwner(resource *apiv1alpha1.ClusterAPIGroup) types.NamespacedName {
+	annotations := resource.GetAnnotations()
+
+	name := annotations[requestNameAnnotation]
+	namespace := annotations[requestNamespaceAnnotation]
+
+	if name == "" || namespace == "" {
+		return types.NamespacedName{}
+	}
+
+	return types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+}
+
+// this function will check via annotations, if a resource is owned
+func isOwned(obj client.Object, nn types.NamespacedName) (ownedByUs, ownedByOthers bool) {
+	annotations := obj.GetAnnotations()
+	ownedByUs = false
+	ownedByOthers = false
+
+	namespacedName := types.NamespacedName{
+		Name:      annotations[requestNameAnnotation],
+		Namespace: annotations[requestNamespaceAnnotation],
+	}
+
+	_, reqNameAnnotationExists := annotations[requestNameAnnotation]
+	_, reqNamespaceAnnotationExists := annotations[requestNamespaceAnnotation]
+
+	if reqNameAnnotationExists && reqNamespaceAnnotationExists {
+		if nn == namespacedName {
+			ownedByUs = true
+		} else {
+			ownedByOthers = true
+		}
+	}
+
+	return
 }
 
 // SetupWithManager sets up the controller with the Manager.
