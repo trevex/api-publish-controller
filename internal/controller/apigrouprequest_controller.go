@@ -31,6 +31,7 @@ import (
 	apiv1alpha1 "github.com/trevex/api-publish-controller/api/v1alpha1"
 	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -93,6 +94,7 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Handling resources marked for deletion
 	if agr.DeletionTimestamp != nil {
+		logger.Info("APIGroupRequest has been marked for deletion")
 		cagrOwned, _ := isOwned(cagr, req.NamespacedName)
 
 		// deleting ClusterAPIGroup resource, if it exists and is owned by us
@@ -246,6 +248,7 @@ func isOwned(obj client.Object, nn types.NamespacedName) (ownedByUs, ownedByOthe
 func (r *APIGroupRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1alpha1.APIGroupRequest{}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 1}).
 		Named("apigrouprequest").
 		Complete(r)
 }
