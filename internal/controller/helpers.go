@@ -1,47 +1,66 @@
 package controller
 
 import (
+	"context"
+
+	"github.com/pkg/errors"
+	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
-// These functions are copied from the main branch of github.com/kubernetes-sigs/controller-runtime, which already has the function "HasOwnerReference".
-// As soon as a new release including that function is available, this file can be removed and the function from controller-runtime can be used
+// this function will check via annotations, if a resource is owned
+func isOwned(obj client.Object, nn types.NamespacedName) (ownedByUs, ownedByOthers bool) {
+	annotations := obj.GetAnnotations()
+	ownedByUs = false
+	ownedByOthers = false
 
-func HasOwnerReference(ownerRefs []metav1.OwnerReference, obj client.Object, scheme *runtime.Scheme) (bool, error) {
-	gvk, err := apiutil.GVKForObject(obj, scheme)
-	if err != nil {
-		return false, err
+	namespacedName := types.NamespacedName{
+		Name:      annotations[requestNameAnnotation],
+		Namespace: annotations[requestNamespaceAnnotation],
 	}
-	idx := indexOwnerRef(ownerRefs, metav1.OwnerReference{
-		APIVersion: gvk.GroupVersion().String(),
-		Name:       obj.GetName(),
-		Kind:       gvk.Kind,
-	})
-	return idx != -1, nil
-}
 
-func indexOwnerRef(ownerReferences []metav1.OwnerReference, ref metav1.OwnerReference) int {
-	for index, r := range ownerReferences {
-		if referSameObject(r, ref) {
-			return index
+	_, reqNameAnnotationExists := annotations[requestNameAnnotation]
+	_, reqNamespaceAnnotationExists := annotations[requestNamespaceAnnotation]
+
+	if reqNameAnnotationExists && reqNamespaceAnnotationExists {
+		if nn == namespacedName {
+			ownedByUs = true
+		} else {
+			ownedByOthers = true
 		}
 	}
-	return -1
+
+	return
 }
 
-func referSameObject(a, b metav1.OwnerReference) bool {
-	aGV, err := schema.ParseGroupVersion(a.APIVersion)
-	if err != nil {
-		return false
+func getOwner(resource client.Object) types.NamespacedName {
+	annotations := resource.GetAnnotations()
+
+	name := annotations[requestNameAnnotation]
+	namespace := annotations[requestNamespaceAnnotation]
+
+	if name == "" || namespace == "" {
+		return types.NamespacedName{}
 	}
 
-	bGV, err := schema.ParseGroupVersion(b.APIVersion)
-	if err != nil {
-		return false
+	return types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
 	}
-	return aGV.Group == bGV.Group && a.Kind == b.Kind && a.Name == b.Name
+}
+
+func updateConditions(ctx context.Context, client client.Client, namespacedName types.NamespacedName, obj client.Object, conditions *[]metav1.Condition, condition metav1.Condition) error {
+	if err := client.Get(ctx, namespacedName, obj); err != nil {
+		return errors.Wrap(err, "unable to get resource")
+	}
+
+	apimachinerymeta.SetStatusCondition(conditions, condition)
+
+	if err := client.Status().Update(ctx, obj); err != nil {
+		return errors.Wrap(err, "unable to update resource status")
+	}
+
+	return nil
 }
