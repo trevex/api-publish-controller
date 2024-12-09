@@ -22,14 +22,12 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/pkg/errors"
 	apiv1alpha1 "github.com/trevex/api-publish-controller/api/v1alpha1"
-	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -132,7 +130,7 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		// If exists and is not owned by current request, set status "invalid"
 		// Q: Status "invalid" is not possible, only "True", "False" or "Unknown" are possible
 		if cagrOwnedByOthers {
-			owner := getClusterApiGroupOwner(cagr)
+			owner := getOwner(cagr)
 			logger.Info("resource owned by someone else", "ClusterAPIGroup", cagr.Name, "owner name:", owner.Name, "owner namespace:", owner.Namespace)
 
 			// then we update the status of our APIGroupRequest
@@ -142,10 +140,11 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				Reason:  "ClusterAPIGroupOwnedByOthers",
 				Message: fmt.Sprintf("ClusterAPIGroup %s already exists and is owned by someone else", cagr.Name),
 			}
-			apimachinerymeta.SetStatusCondition(&agr.Status.Conditions, condition)
-			if err := r.Status().Update(ctx, agr); err != nil {
+
+			if err := updateConditions(ctx, r.Client, req.NamespacedName, agr, &agr.Status.Conditions, condition); err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIGroupRequest")
 			}
+
 			return ctrl.Result{}, nil
 		}
 
@@ -160,88 +159,45 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				Reason:  "ClusterAPIGroupAlreadyOwned",
 				Message: fmt.Sprintf("ClusterAPIGroup %s already exists and is already owned by APIGroupRequest %s", cagr.Name, agr.Name),
 			}
-			apimachinerymeta.SetStatusCondition(&agr.Status.Conditions, condition)
-			if err := r.Status().Update(ctx, agr); err != nil {
+
+			if err := updateConditions(ctx, r.Client, req.NamespacedName, agr, &agr.Status.Conditions, condition); err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIGroupRequest")
 			}
+
 			return ctrl.Result{}, nil
 		}
 	}
 
 	// if corresponding ClusterAPIGroup does not already exist
-	if !cagrExists {
-		logger.Info("creating corresponding ClusterAPIGroup")
+	logger.Info("creating corresponding ClusterAPIGroup")
 
-		// create necessary ClusterAPIGroup
-		cagr := &apiv1alpha1.ClusterAPIGroup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: agr.Name,
-				Annotations: map[string]string{
-					requestNameAnnotation:      agr.Name,
-					requestNamespaceAnnotation: agr.Namespace,
-				},
+	// create necessary ClusterAPIGroup
+	cagr = &apiv1alpha1.ClusterAPIGroup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: agr.Name,
+			Annotations: map[string]string{
+				requestNameAnnotation:      agr.Name,
+				requestNamespaceAnnotation: agr.Namespace,
 			},
-		}
-		if err := r.Create(ctx, cagr); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "unable to create ClusterAPIGroup")
-		}
+		},
+	}
+	if err := r.Create(ctx, cagr); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "unable to create ClusterAPIGroup")
+	}
 
-		// update the status of our APIGroupRequest
-		condition := metav1.Condition{
-			Type:    "APIGroupReserved",
-			Status:  "True",
-			Reason:  "ClusterAPIGroupCreated",
-			Message: fmt.Sprintf("ClusterAPIGroup %s has been created and owner is set to APIGroupRequest %s", cagr.Name, agr.Name),
-		}
-		apimachinerymeta.SetStatusCondition(&agr.Status.Conditions, condition)
-		if err := r.Status().Update(ctx, agr); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIGroupRequest")
-		}
-		return ctrl.Result{}, nil
+	// update the status of our APIGroupRequest
+	condition := metav1.Condition{
+		Type:    "APIGroupReserved",
+		Status:  "True",
+		Reason:  "ClusterAPIGroupCreated",
+		Message: fmt.Sprintf("ClusterAPIGroup %s has been created and owner is set to APIGroupRequest %s", cagr.Name, agr.Name),
+	}
+
+	if err := updateConditions(ctx, r.Client, req.NamespacedName, agr, &agr.Status.Conditions, condition); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIGroupRequest")
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func getClusterApiGroupOwner(resource *apiv1alpha1.ClusterAPIGroup) types.NamespacedName {
-	annotations := resource.GetAnnotations()
-
-	name := annotations[requestNameAnnotation]
-	namespace := annotations[requestNamespaceAnnotation]
-
-	if name == "" || namespace == "" {
-		return types.NamespacedName{}
-	}
-
-	return types.NamespacedName{
-		Name:      name,
-		Namespace: namespace,
-	}
-}
-
-// this function will check via annotations, if a resource is owned
-func isOwned(obj client.Object, nn types.NamespacedName) (ownedByUs, ownedByOthers bool) {
-	annotations := obj.GetAnnotations()
-	ownedByUs = false
-	ownedByOthers = false
-
-	namespacedName := types.NamespacedName{
-		Name:      annotations[requestNameAnnotation],
-		Namespace: annotations[requestNamespaceAnnotation],
-	}
-
-	_, reqNameAnnotationExists := annotations[requestNameAnnotation]
-	_, reqNamespaceAnnotationExists := annotations[requestNamespaceAnnotation]
-
-	if reqNameAnnotationExists && reqNamespaceAnnotationExists {
-		if nn == namespacedName {
-			ownedByUs = true
-		} else {
-			ownedByOthers = true
-		}
-	}
-
-	return
 }
 
 // SetupWithManager sets up the controller with the Manager.
