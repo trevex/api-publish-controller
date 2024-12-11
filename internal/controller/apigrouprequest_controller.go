@@ -40,9 +40,8 @@ type APIGroupRequestReconciler struct {
 }
 
 var (
-	finalizerName              = "api.kovi.li/finalizer"
-	requestNameAnnotation      = "api.kovo.li/request-name"
-	requestNamespaceAnnotation = "api.kovo.li/request-namespace"
+	requestNameAnnotation      = fmt.Sprintf("%s/request-name", apiv1alpha1.GroupVersion.Group)
+	requestNamespaceAnnotation = fmt.Sprintf("%s/request-namespace", apiv1alpha1.GroupVersion.Group)
 )
 
 // +kubebuilder:rbac:groups=api.kovo.li,resources=apigrouprequests,verbs=get;list;watch;create;update;patch;delete
