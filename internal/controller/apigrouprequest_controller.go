@@ -93,7 +93,7 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Handling resources marked for deletion
 	if agr.DeletionTimestamp != nil {
 		logger.Info("APIGroupRequest has been marked for deletion")
-		cagrOwned, _ := isOwned(cagr, req.NamespacedName)
+		cagrOwned, _ := isOwned(cagr, req.NamespacedName, requestNameAnnotation, requestNamespaceAnnotation)
 
 		// deleting ClusterAPIGroup resource, if it exists and is owned by us
 		if cagrExists && cagrOwned {
@@ -125,7 +125,7 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Now we check, if a corresponding ClusterAPIGroup for our APIGroupRequest already exists.
 	if cagrExists {
-		cagrOwnedByUs, cagrOwnedByOthers := isOwned(cagr, req.NamespacedName)
+		cagrOwnedByUs, cagrOwnedByOthers := isOwned(cagr, req.NamespacedName, requestNameAnnotation, requestNamespaceAnnotation)
 
 		// If exists and is not owned by current request, set status "invalid"
 		// Q: Status "invalid" is not possible, only "True", "False" or "Unknown" are possible

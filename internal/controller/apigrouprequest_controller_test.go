@@ -207,7 +207,7 @@ var _ = Describe("APIGroupRequest Controller", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, cagr)).To(Succeed())
 
 			By("Checking, if corresponding ClusterAPIGroup has correct owner annotations")
-			ownedByUs, _ := isOwned(cagr, typeNamespacedName)
+			ownedByUs, _ := isOwned(cagr, typeNamespacedName, requestNameAnnotation, requestNamespaceAnnotation)
 			Expect(ownedByUs).To(BeTrue())
 
 			By("Checking, if status of APIGroupRequest resource is set correctly")

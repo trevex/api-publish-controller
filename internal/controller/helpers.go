@@ -11,7 +11,7 @@ import (
 )
 
 // this function will check via annotations, if a resource is owned
-func isOwned(obj client.Object, nn types.NamespacedName) (ownedByUs, ownedByOthers bool) {
+func isOwned(obj client.Object, nn types.NamespacedName, nameAnnotation, namespaceAnnotation string) (ownedByUs, ownedByOthers bool) {
 	annotations := obj.GetAnnotations()
 	ownedByUs = false
 	ownedByOthers = false
