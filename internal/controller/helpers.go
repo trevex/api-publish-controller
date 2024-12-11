@@ -17,8 +17,8 @@ func isOwned(obj client.Object, nn types.NamespacedName, nameAnnotation, namespa
 	ownedByOthers = false
 
 	namespacedName := types.NamespacedName{
-		Name:      annotations[requestNameAnnotation],
-		Namespace: annotations[requestNamespaceAnnotation],
+		Name:      annotations[nameAnnotation],
+		Namespace: annotations[namespaceAnnotation],
 	}
 
 	_, reqNameAnnotationExists := annotations[requestNameAnnotation]
