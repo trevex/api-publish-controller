@@ -18,13 +18,20 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/pkg/errors"
 	apiv1alpha1 "github.com/trevex/api-publish-controller/api/v1alpha1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // APIResourceDefinitionReconciler reconciles a APIResourceDefinition object
@@ -32,6 +39,11 @@ type APIResourceDefinitionReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
+
+var (
+	definitionNameAnnotation      = fmt.Sprintf("%s/definition-name", apiv1alpha1.GroupVersion.Group)
+	definitionNamespaceAnnotation = fmt.Sprintf("%s/definition-namespace", apiv1alpha1.GroupVersion.Group)
+)
 
 // +kubebuilder:rbac:groups=api.kovo.li,resources=apiresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=api.kovo.li,resources=apiresourcedefinitions/status,verbs=get;update;patch
@@ -47,14 +59,74 @@ type APIResourceDefinitionReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
-	// TODO:
-	// Is being deleted, delete CRD
-	// Check if changed... e.g. Status does not match CRD version
-	// If changed or does not exist:
-	//   Check approved APIGroupRequests, only proceed if use apigroup is approved, otherwise fail/update status
-	//   Create CRD
+	logger.Info("reconciling resource")
+
+	ard := &apiv1alpha1.APIResourceDefinition{}
+	if err := r.Get(ctx, req.NamespacedName, ard); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, errors.Wrap(err, "could not get APIResourceDefinition")
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Check, if CRD is already in place
+	logger.Info("fetching CRD")
+	crdExists := false
+	crd := &apiextensionsv1.CustomResourceDefinition{}
+	crdName := fmt.Sprintf("%s.%s", ard.Spec.Names.Plural, ard.Spec.Group)
+
+	if err := r.Get(ctx, client.ObjectKey{Name: crdName}, crd); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, errors.Wrap(err, "could not get requested CRD")
+		}
+		crdExists = false
+	} else {
+		crdExists = true
+	}
+
+	crdOwnedByUs, _ := isOwned(crd, req.NamespacedName, definitionNameAnnotation, definitionNamespaceAnnotation)
+
+	// if resource is marked for deletion
+	if ard.DeletionTimestamp != nil {
+		logger.Info("resource is marked for deletion", "APIResourceDefinition", ard.Name)
+
+		// if requested CRD exists and we own it
+		if crdExists && crdOwnedByUs {
+			// check, for all versions of the CRD, if resources of this kind still exist in the cluster
+			for _, version := range ard.Spec.Versions {
+				gvk := schema.GroupVersionKind{
+					Group:   ard.Spec.Group,
+					Version: version.Name,
+					Kind:    ard.Spec.Names.Kind,
+				}
+
+				resourceList := &unstructured.UnstructuredList{}
+				resourceList.SetGroupVersionKind(gvk)
+
+				if err := r.List(ctx, resourceList); err != nil {
+					return ctrl.Result{}, errors.Wrap(err, "error while fetching the list of resources for requested CRD")
+				}
+
+				// if resources of that kind have been found
+				if len(resourceList.Items) != 0 {
+					resourceNames := []types.NamespacedName{}
+
+					for _, resource := range resourceList.Items {
+						resourceNames = append(resourceNames, types.NamespacedName{
+							Name:      resource.GetName(),
+							Namespace: resource.GetNamespace(),
+						})
+					}
+
+					logger.Info("there are still resources of CRD left", ard.Spec.Names.Kind, "list:", resourceNames)
+					// condition := metav1.Condition{
+
+				}
+			}
+		}
+	}
 
 	return ctrl.Result{}, nil
 }
