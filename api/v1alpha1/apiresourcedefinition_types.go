@@ -30,6 +30,8 @@ type APIResourceDefinitionStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
+// +kubebuilder:subresource:status
+
 // APIResourceDefinition is the Schema for the apiresourcedefinitions API.
 //
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
