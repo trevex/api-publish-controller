@@ -23,21 +23,25 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/pkg/errors"
 	apiv1alpha1 "github.com/trevex/api-publish-controller/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // APIResourceDefinitionReconciler reconciles a APIResourceDefinition object
 type APIResourceDefinitionReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	EventRecorder record.EventRecorder
 }
 
 var (
@@ -120,8 +124,20 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 						})
 					}
 
-					logger.Info("there are still resources of CRD left", ard.Spec.Names.Kind, "list:", resourceNames)
-					// condition := metav1.Condition{
+					logger.Info("there are still resources of CRD left, denying deletion request", "kind:", ard.Spec.Names.Kind, "list:", resourceNames)
+					condition := metav1.Condition{
+						Type:    "DeletionApproved",
+						Status:  "False",
+						Reason:  "CRstillExists",
+						Message: fmt.Sprintf("resources of kind %s are sill existent, deletion of APIResourceDefinition denied", gvk.Kind),
+					}
+
+					if err := updateConditions(ctx, r.Client, req.NamespacedName, ard, &ard.Status.Conditions, condition); err != nil {
+						return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIResourceDefinition")
+					}
+
+					r.EventRecorder.Eventf(ard, corev1.EventTypeWarning, "DeletionBlocked",
+						"Resource deletion is blocked because dependent resources of kind %s still exist", ard.Spec.Names.Kind)
 
 				}
 			}
@@ -133,6 +149,7 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *APIResourceDefinitionReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.EventRecorder = mgr.GetEventRecorderFor("apiresourcedefinition-controller")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1alpha1.APIResourceDefinition{}).
 		Named("apiresourcedefinition").
