@@ -1,0 +1,5 @@
+apiVersion: stable.example.com/v1
+kind: shirt
+metadata:
+  name: testshirt
+  namespace: tenant-a
