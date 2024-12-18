@@ -79,7 +79,7 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 	logger.Info("fetching CRD")
 	crdExists := false
 	crd := &apiextensionsv1.CustomResourceDefinition{}
-	crdName := fmt.Sprintf("%s.%s", ard.Spec.Names.Plural, ard.Spec.Group)
+	crdName := fmt.Sprintf("%s.%s", ard.Spec.APIResourceSchemaSpec.Names.Plural, ard.Spec.APIResourceSchemaSpec.Group)
 
 	if err := r.Get(ctx, client.ObjectKey{Name: crdName}, crd); err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -99,11 +99,11 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 		// if requested CRD exists and we own it
 		if crdExists && crdOwnedByUs {
 			// check, for all versions of the CRD, if resources of this kind still exist in the cluster
-			for _, version := range ard.Spec.Versions {
+			for _, version := range ard.Spec.APIResourceSchemaSpec.Versions {
 				gvk := schema.GroupVersionKind{
-					Group:   ard.Spec.Group,
+					Group:   ard.Spec.APIResourceSchemaSpec.Group,
 					Version: version.Name,
-					Kind:    ard.Spec.Names.Kind,
+					Kind:    ard.Spec.APIResourceSchemaSpec.Names.Kind,
 				}
 
 				resourceList := &unstructured.UnstructuredList{}
@@ -137,7 +137,7 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 					}
 
 					r.EventRecorder.Eventf(ard, corev1.EventTypeWarning, "DeletionBlocked",
-						"Resource deletion is blocked because dependent resources of kind %s still exist", ard.Spec.Names.Kind)
+						"CRD deletion is blocked because dependent resources of kind %s still exist. List of resources: %s", ard.Spec.APIResourceSchemaSpec.Names.Kind, jsonOutput)
 
 				}
 			}

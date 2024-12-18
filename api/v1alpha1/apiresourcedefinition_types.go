@@ -20,10 +20,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kcpv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/apis/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+// APIResourceDefinitionSpec defines the specification for the APIResourceDefinition
+type APIResourceDefinitionSpec struct {
+	APIResourceSchemaSpec kcpv1alpha1.APIResourceSchemaSpec `json:"apiResourceSchemaSpec,omitempty"`
+	ServiceAccountRef     *corev1.LocalObjectReference      `json:"serviceAccountRef,omitempty"`
+}
 
 // APIResourceDefinitionStatus defines the observed state of APIResourceDefinition.
 type APIResourceDefinitionStatus struct {
@@ -39,8 +46,8 @@ type APIResourceDefinition struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   kcpv1alpha1.APIResourceSchemaSpec `json:"spec,omitempty"`
-	Status APIResourceDefinitionStatus       `json:"status,omitempty"`
+	Spec   APIResourceDefinitionSpec   `json:"spec,omitempty"`
+	Status APIResourceDefinitionStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

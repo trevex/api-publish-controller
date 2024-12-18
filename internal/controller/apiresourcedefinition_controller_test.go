@@ -55,30 +55,31 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					Spec: kcpv1alpha1.APIResourceSchemaSpec{
-						Group: "stable.example.com",
-						Scope: apiextensionsv1.NamespaceScoped,
-						Names: apiextensionsv1.CustomResourceDefinitionNames{
-							Plural:   "shirts",
-							Singular: "shirt",
-							Kind:     "Shirt",
-						},
-						Versions: []kcpv1alpha1.APIResourceVersion{
-							{
-								Name:    "v1",
-								Served:  true,
-								Storage: true,
-								Schema: runtime.RawExtension{
-									Raw: jsonOrDie(
-										&apiextensionsv1.JSONSchemaProps{
-											Type: "object",
-										},
-									),
+					Spec: apiv1alpha1.APIResourceDefinitionSpec{
+						APIResourceSchemaSpec: kcpv1alpha1.APIResourceSchemaSpec{
+							Group: "stable.example.com",
+							Scope: apiextensionsv1.NamespaceScoped,
+							Names: apiextensionsv1.CustomResourceDefinitionNames{
+								Plural:   "shirts",
+								Singular: "shirt",
+								Kind:     "Shirt",
+							},
+							Versions: []kcpv1alpha1.APIResourceVersion{
+								{
+									Name:    "v1",
+									Served:  true,
+									Storage: true,
+									Schema: runtime.RawExtension{
+										Raw: jsonOrDie(
+											&apiextensionsv1.JSONSchemaProps{
+												Type: "object",
+											},
+										),
+									},
 								},
 							},
 						},
-					},
-				}
+					}}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
