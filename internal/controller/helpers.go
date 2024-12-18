@@ -2,8 +2,11 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -62,5 +65,22 @@ func updateConditions(ctx context.Context, client client.Client, namespacedName 
 		return errors.Wrap(err, "unable to update resource status")
 	}
 
+	return nil
+}
+
+func deleteIfExists(ctx context.Context, client client.Client, namespacedName types.NamespacedName, obj client.Object, logger logr.Logger) error {
+	kind := obj.GetObjectKind()
+
+	if err := client.Get(ctx, namespacedName, obj); err != nil {
+		if !apierrors.IsNotFound(err) {
+			message := fmt.Sprintf("unable to get %s", kind)
+			return errors.Wrap(err, message)
+		}
+	} else {
+		if err := client.Delete(ctx, obj); err != nil {
+			message := fmt.Sprintf("unable to delete %s", kind)
+			return errors.Wrap(err, message)
+		}
+	}
 	return nil
 }
