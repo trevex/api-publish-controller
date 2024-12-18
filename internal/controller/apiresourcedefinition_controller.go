@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -31,9 +32,9 @@ import (
 	"github.com/pkg/errors"
 	apiv1alpha1 "github.com/trevex/api-publish-controller/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -74,6 +75,9 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 		}
 		return ctrl.Result{}, nil
 	}
+
+	clusterRoleName := fmt.Sprintf("%s-role", ard.Name)
+	clusterRoleBindingName := fmt.Sprintf("%s-rolebinding", ard.Name)
 
 	// Check, if CRD is already in place
 	logger.Info("fetching CRD")
@@ -124,21 +128,34 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 						})
 					}
 
-					logger.Info("there are still resources of CRD left, denying deletion request", "kind:", ard.Spec.Names.Kind, "list:", resourceNames)
-					condition := metav1.Condition{
-						Type:    "DeletionApproved",
-						Status:  "False",
-						Reason:  "CRstillExists",
-						Message: fmt.Sprintf("resources of kind %s are sill existent, deletion of APIResourceDefinition denied", gvk.Kind),
-					}
-
-					if err := updateConditions(ctx, r.Client, req.NamespacedName, ard, &ard.Status.Conditions, condition); err != nil {
-						return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIResourceDefinition")
+					logger.Info("there are still resources of CRD left, denying deletion request", "kind:", ard.Spec.APIResourceSchemaSpec.Names.Kind, "list:", resourceNames)
+					jsonOutput, err := json.Marshal(resourceNames)
+					if err != nil {
+						return ctrl.Result{}, errors.Wrap(err, "unable to marshal JSON object")
 					}
 
 					r.EventRecorder.Eventf(ard, corev1.EventTypeWarning, "DeletionBlocked",
 						"CRD deletion is blocked because dependent resources of kind %s still exist. List of resources: %s", ard.Spec.APIResourceSchemaSpec.Names.Kind, jsonOutput)
 
+					return ctrl.Result{}, nil
+				}
+
+				// no resources of the requested kind are found, so we can continue removing the crd
+				logger.Info("deleting CRD, as there are no instances of it left", "CRD:", crdName)
+
+				if err := r.Delete(ctx, crd); err != nil {
+					return ctrl.Result{}, errors.Wrap(err, "unable to delete CRD")
+				}
+
+				// also delete ClusterRole and ClusterRoleBinding, if they exist
+				cr := &rbacv1.ClusterRole{}
+				if err := deleteIfExists(ctx, r.Client, types.NamespacedName{Name: clusterRoleName}, cr, logger); err != nil {
+					return ctrl.Result{}, err
+				}
+
+				crb := &rbacv1.ClusterRoleBinding{}
+				if err := deleteIfExists(ctx, r.Client, types.NamespacedName{Name: clusterRoleBindingName}, crb, logger); err != nil {
+					return ctrl.Result{}, err
 				}
 			}
 		}

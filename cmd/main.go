@@ -37,6 +37,7 @@ import (
 
 	apiv1alpha1 "github.com/trevex/api-publish-controller/api/v1alpha1"
 	"github.com/trevex/api-publish-controller/internal/controller"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	// +kubebuilder:scaffold:imports
 )
@@ -53,6 +54,7 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
+	utilruntime.Must(rbacv1.AddToScheme(scheme))
 }
 
 func main() {
