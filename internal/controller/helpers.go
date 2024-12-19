@@ -69,14 +69,15 @@ func updateConditions(ctx context.Context, client client.Client, namespacedName 
 }
 
 func deleteIfExists(ctx context.Context, client client.Client, namespacedName types.NamespacedName, obj client.Object, logger logr.Logger) error {
-	kind := obj.GetObjectKind()
 
 	if err := client.Get(ctx, namespacedName, obj); err != nil {
 		if !apierrors.IsNotFound(err) {
-			message := fmt.Sprintf("unable to get %s", kind)
-			return errors.Wrap(err, message)
+			return errors.Wrap(err, "unable to get object")
 		}
 	} else {
+		kind := obj.GetObjectKind().GroupVersionKind().Kind
+		logger.Info(fmt.Sprintf("Found corresponding %s, deleting it", kind))
+
 		if err := client.Delete(ctx, obj); err != nil {
 			message := fmt.Sprintf("unable to delete %s", kind)
 			return errors.Wrap(err, message)
