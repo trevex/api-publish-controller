@@ -162,7 +162,9 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 
 		// removing finalizer
 		logger.Info("removing finalizer")
-		removeFinalizer(ctx, r.Client, ard, finalizerName)
+		if err := removeFinalizer(ctx, r.Client, ard, finalizerName); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "unable to remove finalizer")
+		}
 	}
 
 	return ctrl.Result{}, nil
