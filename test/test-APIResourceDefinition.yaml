@@ -4,16 +4,19 @@ metadata:
   name: shirts.stable.example.com
   namespace: tenant-a
 spec:
-  group: stable.example.com
-  scope: Namespaced
-  names:
-    plural: shirts
-    singular: shirt
-    kind: shirt
-  versions:
-    - name: v1
-      served: true
-      storage: true
-      schema:
-        openAPIV3Schema:
-          type: object
+  serviceAccountRef:
+    name: shirts.stable.example.com-sa
+  apiResourceSchemaSpec:
+    group: stable.example.com
+    scope: Namespaced
+    names:
+      plural: shirts
+      singular: shirt
+      kind: shirt
+    versions:
+      - name: v1
+        served: true
+        storage: true
+        schema:
+          openAPIV3Schema:
+            type: object
