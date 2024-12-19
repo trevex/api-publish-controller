@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // this function will check via annotations, if a resource is owned
@@ -82,6 +83,20 @@ func deleteIfExists(ctx context.Context, client client.Client, namespacedName ty
 			message := fmt.Sprintf("unable to delete %s", kind)
 			return errors.Wrap(err, message)
 		}
+	}
+	return nil
+}
+
+func removeFinalizer(ctx context.Context, client client.Client, obj client.Object, finalizerName string) error {
+
+	if err := client.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, obj); err != nil {
+		return errors.Wrap(err, "could not update APIGroupRequest")
+	}
+
+	controllerutil.RemoveFinalizer(obj, finalizerName)
+
+	if err := client.Update(ctx, obj); err != nil {
+		return errors.Wrap(err, "could not update APIGroupRequest")
 	}
 	return nil
 }
