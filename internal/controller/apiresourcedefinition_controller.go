@@ -146,19 +146,23 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 				if err := r.Delete(ctx, crd); err != nil {
 					return ctrl.Result{}, errors.Wrap(err, "unable to delete CRD")
 				}
-
-				// also delete ClusterRole and ClusterRoleBinding, if they exist
-				cr := &rbacv1.ClusterRole{}
-				if err := deleteIfExists(ctx, r.Client, types.NamespacedName{Name: clusterRoleName}, cr, logger); err != nil {
-					return ctrl.Result{}, err
-				}
-
-				crb := &rbacv1.ClusterRoleBinding{}
-				if err := deleteIfExists(ctx, r.Client, types.NamespacedName{Name: clusterRoleBindingName}, crb, logger); err != nil {
-					return ctrl.Result{}, err
-				}
 			}
 		}
+
+		// also delete ClusterRole and ClusterRoleBinding, if they exist
+		cr := &rbacv1.ClusterRole{}
+		if err := deleteIfExists(ctx, r.Client, types.NamespacedName{Name: clusterRoleName}, cr, logger); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		crb := &rbacv1.ClusterRoleBinding{}
+		if err := deleteIfExists(ctx, r.Client, types.NamespacedName{Name: clusterRoleBindingName}, crb, logger); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		// removing finalizer
+		logger.Info("removing finalizer")
+		removeFinalizer(ctx, r.Client, ard, finalizerName)
 	}
 
 	return ctrl.Result{}, nil
