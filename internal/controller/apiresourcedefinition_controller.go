@@ -35,6 +35,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -168,6 +169,48 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func createCRDfromARD(ard *apiv1alpha1.APIResourceDefinition) (*apiextensionsv1.CustomResourceDefinition, error) {
+
+	crdVersions := []apiextensionsv1.CustomResourceDefinitionVersion{}
+
+	for _, version := range ard.Spec.APIResourceSchemaSpec.Versions {
+
+		schemaProps := &apiextensionsv1.JSONSchemaProps{}
+		if err := json.Unmarshal(version.Schema.Raw, schemaProps); err != nil {
+			return &apiextensionsv1.CustomResourceDefinition{}, errors.Wrap(err, "could not unmarshal JSONSchemaProps")
+		}
+
+		crdVersion := apiextensionsv1.CustomResourceDefinitionVersion{
+			Name:                     version.Name,
+			Served:                   version.Served,
+			Storage:                  version.Storage,
+			Deprecated:               version.Deprecated,
+			DeprecationWarning:       version.DeprecationWarning,
+			Subresources:             &version.Subresources,
+			AdditionalPrinterColumns: version.AdditionalPrinterColumns,
+			Schema: &apiextensionsv1.CustomResourceValidation{
+				OpenAPIV3Schema: schemaProps,
+			},
+		}
+
+		crdVersions = append(crdVersions, crdVersion)
+	}
+
+	crd := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ard.Name,
+		},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group:    ard.Spec.APIResourceSchemaSpec.Group,
+			Names:    ard.Spec.APIResourceSchemaSpec.Names,
+			Scope:    ard.Spec.APIResourceSchemaSpec.Scope,
+			Versions: crdVersions,
+		},
+	}
+
+	return crd, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
