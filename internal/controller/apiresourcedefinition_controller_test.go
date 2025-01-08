@@ -198,6 +198,12 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 
 		})
 
+		AfterEach(func() {
+			By("deleting ServiceAccount")
+			Expect(k8sClient.Delete(ctx, sa)).To(Succeed())
+
+		})
+
 		It("should successfully delete the resource", func() {
 			By("reconciling the created resource")
 			reconcileARD(ctx, k8sClient, typeNamespacedName)
