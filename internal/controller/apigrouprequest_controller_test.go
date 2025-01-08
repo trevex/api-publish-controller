@@ -95,18 +95,10 @@ var _ = Describe("APIGroupRequest Controller", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, apiGroupRequest)).To(Succeed())
 
 			By("reconciling the created resource")
-			controllerReconciler := &APIGroupRequestReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			reconcileResource(ctx, k8sClient, typeNamespacedName)
 
 			By("checking for the ClusterAPIGroup resource")
-			err = k8sClient.Get(ctx, typeNamespacedName, clusterApiGroup)
+			err := k8sClient.Get(ctx, typeNamespacedName, clusterApiGroup)
 			Expect(errors.IsNotFound(err)).To(BeTrue())
 
 			By("checking for the APIGroupRequest resource")
