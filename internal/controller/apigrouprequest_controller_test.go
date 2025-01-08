@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -51,6 +52,7 @@ var _ = Describe("APIGroupRequest Controller", func() {
 		ctx := context.Background()
 
 		BeforeEach(func() {
+
 			By("creating the custom resource for the Kind APIGroupRequest")
 			err := k8sClient.Get(ctx, typeNamespacedName, apiGroupRequest)
 			if err != nil && errors.IsNotFound(err) {
@@ -214,3 +216,14 @@ var _ = Describe("APIGroupRequest Controller", func() {
 		})
 	})
 })
+
+func reconcileResource(ctx context.Context, client client.Client, namespacedName types.NamespacedName) {
+	controllerReconciler := &APIGroupRequestReconciler{
+		Client: client,
+		Scheme: client.Scheme(),
+	}
+	_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: namespacedName,
+	})
+	Expect(err).NotTo(HaveOccurred())
+}
