@@ -95,7 +95,7 @@ var _ = Describe("APIGroupRequest Controller", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, apiGroupRequest)).To(Succeed())
 
 			By("reconciling the created resource")
-			reconcileResource(ctx, k8sClient, typeNamespacedName)
+			reconcileAGR(ctx, k8sClient, typeNamespacedName)
 
 			By("checking for the ClusterAPIGroup resource")
 			err := k8sClient.Get(ctx, typeNamespacedName, clusterApiGroup)
@@ -135,7 +135,7 @@ var _ = Describe("APIGroupRequest Controller", func() {
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 
 			By("Reconciling the resource to delete it successfully")
-			reconcileResource(ctx, k8sClient, typeNamespacedName)
+			reconcileAGR(ctx, k8sClient, typeNamespacedName)
 
 			By("Checking, if resource is gone after deleting it")
 			err = k8sClient.Get(ctx, typeNamespacedName, apiGroupRequest)
@@ -156,7 +156,7 @@ var _ = Describe("APIGroupRequest Controller", func() {
 			Expect(k8sClient.Create(ctx, cagr)).To(Succeed())
 
 			By("Reconciling the created resource")
-			reconcileResource(ctx, k8sClient, typeNamespacedName)
+			reconcileAGR(ctx, k8sClient, typeNamespacedName)
 
 			By("Checking, if status of APIGroupRequest resource is set correctly")
 			agr := &apiv1alpha1.APIGroupRequest{}
@@ -181,17 +181,17 @@ var _ = Describe("APIGroupRequest Controller", func() {
 			Expect(k8sClient.Create(ctx, cagr)).To(Succeed())
 
 			By("Reconciling the created resource")
-			reconcileResource(ctx, k8sClient, typeNamespacedName)
+			reconcileAGR(ctx, k8sClient, typeNamespacedName)
 
 			By("Checking, if status of APIGroupRequest resource is set correctly")
 			agr := &apiv1alpha1.APIGroupRequest{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, agr)).To(Succeed())
-			checkStatus(agr.Status.Conditions, "APIGroupReserved", "ClusterAPIGroupAlreadyOwned", BeTrue())
+			checkStatus(agr.Status.Conditions, "APIGroupReserved", "ClusterAPIGroupCreated", BeTrue())
 		})
 
 		It("should successfully reconcile the resource, if ClusterAPIGroup does not already exist", func() {
 			By("Reconciling the created resource")
-			reconcileResource(ctx, k8sClient, typeNamespacedName)
+			reconcileAGR(ctx, k8sClient, typeNamespacedName)
 
 			By("Checking, if corresponding ClusterAPIGroup exists")
 			cagr := &apiv1alpha1.ClusterAPIGroup{}
@@ -209,7 +209,7 @@ var _ = Describe("APIGroupRequest Controller", func() {
 	})
 })
 
-func reconcileResource(ctx context.Context, client client.Client, namespacedName types.NamespacedName) {
+func reconcileAGR(ctx context.Context, client client.Client, namespacedName types.NamespacedName) {
 	controllerReconciler := &APIGroupRequestReconciler{
 		Client: client,
 		Scheme: client.Scheme(),

@@ -28,6 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -198,15 +200,7 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 
 		It("should successfully delete the resource", func() {
 			By("reconciling the created resource")
-			controllerReconciler := &APIResourceDefinitionReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			reconcileARD(ctx, k8sClient, typeNamespacedName)
 
 			By("checking, if APIResourceDefinition is gone")
 			ardTmp := &apiv1alpha1.APIResourceDefinition{}
@@ -315,4 +309,16 @@ func jsonOrDie(obj interface{}) []byte {
 	}
 
 	return ret
+}
+
+func reconcileARD(ctx context.Context, client client.Client, namespacedName types.NamespacedName) {
+	controllerReconciler := &APIResourceDefinitionReconciler{
+		Client:        client,
+		Scheme:        client.Scheme(),
+		EventRecorder: record.NewFakeRecorder(10),
+	}
+	_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: namespacedName,
+	})
+	Expect(err).NotTo(HaveOccurred())
 }
