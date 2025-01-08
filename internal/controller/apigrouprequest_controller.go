@@ -150,6 +150,19 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		// Does current Request already own an APIGroup, if so check existence.
 		if cagrOwnedByUs {
 			logger.Info("resource already owned by", "ClusterAPIGroup", cagr.Name)
+
+			// then update status accordingly
+			condition := metav1.Condition{
+				Type:    "APIGroupReserved",
+				Status:  "True",
+				Reason:  "ClusterAPIGroupCreated",
+				Message: fmt.Sprintf("ClusterAPIGroup %s has been created and owner is set to APIGroupRequest %s", cagr.Name, agr.Name),
+			}
+
+			if err := updateConditions(ctx, r.Client, req.NamespacedName, agr, &agr.Status.Conditions, condition); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIGroupRequest")
+			}
+
 			return ctrl.Result{}, nil
 		}
 	}
