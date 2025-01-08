@@ -21,7 +21,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	gomegatypes "github.com/onsi/gomega/types"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -30,8 +29,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1alpha1 "github.com/trevex/api-publish-controller/api/v1alpha1"
-
-	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 )
 
 var _ = Describe("APIGroupRequest Controller", func() {
@@ -144,7 +141,7 @@ var _ = Describe("APIGroupRequest Controller", func() {
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 
 			By("Reconciling the resource to delete it successfully")
-			reconcileResource(typeNamespacedName)
+			reconcileResource(ctx, k8sClient, typeNamespacedName)
 
 			By("Checking, if resource is gone after deleting it")
 			err = k8sClient.Get(ctx, typeNamespacedName, apiGroupRequest)
@@ -165,7 +162,7 @@ var _ = Describe("APIGroupRequest Controller", func() {
 			Expect(k8sClient.Create(ctx, cagr)).To(Succeed())
 
 			By("Reconciling the created resource")
-			reconcileResource(typeNamespacedName)
+			reconcileResource(ctx, k8sClient, typeNamespacedName)
 
 			By("Checking, if status of APIGroupRequest resource is set correctly")
 			agr := &apiv1alpha1.APIGroupRequest{}
@@ -190,7 +187,7 @@ var _ = Describe("APIGroupRequest Controller", func() {
 			Expect(k8sClient.Create(ctx, cagr)).To(Succeed())
 
 			By("Reconciling the created resource")
-			reconcileResource(typeNamespacedName)
+			reconcileResource(ctx, k8sClient, typeNamespacedName)
 
 			By("Checking, if status of APIGroupRequest resource is set correctly")
 			agr := &apiv1alpha1.APIGroupRequest{}
@@ -200,7 +197,7 @@ var _ = Describe("APIGroupRequest Controller", func() {
 
 		It("should successfully reconcile the resource, if ClusterAPIGroup does not already exist", func() {
 			By("Reconciling the created resource")
-			reconcileResource(typeNamespacedName)
+			reconcileResource(ctx, k8sClient, typeNamespacedName)
 
 			By("Checking, if corresponding ClusterAPIGroup exists")
 			cagr := &apiv1alpha1.ClusterAPIGroup{}
@@ -217,21 +214,3 @@ var _ = Describe("APIGroupRequest Controller", func() {
 		})
 	})
 })
-
-func reconcileResource(namespacedName types.NamespacedName) {
-	controllerReconciler := &APIGroupRequestReconciler{
-		Client: k8sClient,
-		Scheme: k8sClient.Scheme(),
-	}
-
-	_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-		NamespacedName: namespacedName,
-	})
-	Expect(err).NotTo(HaveOccurred())
-}
-
-func checkStatus(conditions []metav1.Condition, conditionType, conditionReason string, matcher gomegatypes.GomegaMatcher) {
-	apiGroupReservedCondition := apimachinerymeta.FindStatusCondition(conditions, conditionType)
-	Expect(apimachinerymeta.IsStatusConditionTrue(conditions, conditionType)).To(matcher)
-	Expect(apiGroupReservedCondition.Reason).To(Equal(conditionReason))
-}

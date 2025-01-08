@@ -12,6 +12,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/onsi/gomega"
+	gomegatypes "github.com/onsi/gomega/types"
 )
 
 // this function will check via annotations, if a resource is owned
@@ -99,4 +103,22 @@ func removeFinalizer(ctx context.Context, client client.Client, obj client.Objec
 		return errors.Wrap(err, "could not update APIGroupRequest")
 	}
 	return nil
+}
+
+func reconcileResource(ctx context.Context, client client.Client, namespacedName types.NamespacedName) {
+	controllerReconciler := &APIGroupRequestReconciler{
+		Client: client,
+		Scheme: client.Scheme(),
+	}
+
+	_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+		NamespacedName: namespacedName,
+	})
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+}
+
+func checkStatus(conditions []metav1.Condition, conditionType, conditionReason string, matcher gomegatypes.GomegaMatcher) {
+	apiGroupReservedCondition := apimachinerymeta.FindStatusCondition(conditions, conditionType)
+	gomega.Expect(apimachinerymeta.IsStatusConditionTrue(conditions, conditionType)).To(matcher)
+	gomega.Expect(apiGroupReservedCondition.Reason).To(gomega.Equal(conditionReason))
 }
