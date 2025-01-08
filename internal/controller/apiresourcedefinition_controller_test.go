@@ -165,26 +165,31 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind APIResourceDefinition")
-			err := k8sClient.Get(ctx, typeNamespacedName, ard)
+			ardTmp := ard.DeepCopy()
+			err := k8sClient.Get(ctx, typeNamespacedName, ardTmp)
 			if err != nil && errors.IsNotFound(err) {
-				Expect(k8sClient.Create(ctx, ard)).To(Succeed())
+				Expect(k8sClient.Create(ctx, ardTmp)).To(Succeed())
 			}
 
 			By("adding a finalizer to the APIResourceDefinition resource")
-			Expect(controllerutil.AddFinalizer(ard, finalizerName)).To(BeTrue())
-			Expect(k8sClient.Update(ctx, ard)).To(Succeed())
+			Expect(controllerutil.AddFinalizer(ardTmp, finalizerName)).To(BeTrue())
+			Expect(k8sClient.Update(ctx, ardTmp)).To(Succeed())
 
 			By("creating ServiceAccount")
-			Expect(k8sClient.Create(ctx, sa)).To(Succeed())
+			saTmp := sa.DeepCopy()
+			Expect(k8sClient.Create(ctx, saTmp)).To(Succeed())
 
 			By("creating ClusterRole")
-			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			crTmp := cr.DeepCopy()
+			Expect(k8sClient.Create(ctx, crTmp)).To(Succeed())
 
 			By("creating ClusterRoleBinding")
-			Expect(k8sClient.Create(ctx, crb)).To(Succeed())
+			crbTmp := crb.DeepCopy()
+			Expect(k8sClient.Create(ctx, crbTmp)).To(Succeed())
 
 			By("creating CRD")
-			Expect(k8sClient.Create(ctx, crd)).To(Succeed())
+			crdTmp := crd.DeepCopy()
+			Expect(k8sClient.Create(ctx, crdTmp)).To(Succeed())
 
 			By("deleting the APIResourceDefinition resource")
 			Expect(k8sClient.Delete(ctx, ard)).To(Succeed())
@@ -204,20 +209,24 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("checking, if APIResourceDefinition is gone")
-			err = k8sClient.Get(ctx, typeNamespacedName, ard)
+			ardTmp := &apiv1alpha1.APIResourceDefinition{}
+			err = k8sClient.Get(ctx, typeNamespacedName, ardTmp)
 			Expect(errors.IsNotFound(err)).To(BeTrue())
 
 			By("checking, if ClusterRole is gone")
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: crName}, cr)
+			crTmp := &rbacv1.ClusterRole{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: crName}, crTmp)
 			Expect(errors.IsNotFound(err)).To(BeTrue())
 
 			By("checking, if ClusterRoleBinding is gone")
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: crbName}, crb)
+			crbTmp := &rbacv1.ClusterRoleBinding{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: crbName}, crbTmp)
 			Expect(errors.IsNotFound(err)).To(BeTrue())
 
 			By("checking, if CRD is gone")
 			Eventually(func() bool {
-				err = k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, crd)
+				crdTmp := &apiextensionsv1.CustomResourceDefinition{}
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, crdTmp)
 				return errors.IsNotFound(err)
 			}).Should(BeTrue())
 		})
