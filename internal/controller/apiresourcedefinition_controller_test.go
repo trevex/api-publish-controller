@@ -24,7 +24,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -139,6 +141,23 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 	}
 
 	crd.SetAnnotations(annotations)
+
+	instance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"metadata": map[string]interface{}{
+				"name":      "testresource",
+				"namespace": resourceNamespace,
+			},
+		},
+	}
+
+	gvk := schema.GroupVersionKind{
+		Group:   ard.Spec.APIResourceSchemaSpec.Group,
+		Version: ard.Spec.APIResourceSchemaSpec.Versions[0].Name,
+		Kind:    ard.Spec.APIResourceSchemaSpec.Names.Kind,
+	}
+
+	instance.SetGroupVersionKind(gvk)
 
 	Context("reconciling a resource marked for deletion", func() {
 
