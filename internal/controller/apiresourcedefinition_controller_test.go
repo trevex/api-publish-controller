@@ -206,7 +206,8 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 
 		It("should successfully delete the resource", func() {
 			By("reconciling the created resource")
-			reconcileARD(ctx, k8sClient, typeNamespacedName)
+			eventRecorder := record.NewFakeRecorder(10)
+			reconcileARD(ctx, k8sClient, typeNamespacedName, eventRecorder)
 
 			By("checking, if APIResourceDefinition is gone")
 			ardTmp := &apiv1alpha1.APIResourceDefinition{}
@@ -230,18 +231,33 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 				return errors.IsNotFound(err)
 			}).Should(BeTrue())
 		})
+
+		It("should successfully block deletion, if CR still exists", func() {
+			By("Adding a CR resource")
+			Expect(k8sClient.Create(ctx, instance)).To(Succeed())
+
+			By("reconciling the created resource")
+			eventRecorder := record.NewFakeRecorder(10)
+			reconcileARD(ctx, k8sClient, typeNamespacedName, eventRecorder)
+			close(eventRecorder.Events)
+
+			By("checking, if ARD resource is still there")
+			ardTmp := &apiv1alpha1.APIResourceDefinition{}
+			err := k8sClient.Get(ctx, typeNamespacedName, ardTmp)
+			Expect(err).ToNot(HaveOccurred())
+
+			By("Checking, if blocked event has been created")
+			events := []string{}
+			for event := range eventRecorder.Events {
+				events = append(events, event)
+			}
+			Expect(events).To(ContainElement(ContainSubstring("DeletionBlocked")))
+		})
 	})
 
 	// Context("When reconciling a resource", func() {
-	// 	const resourceName = "shirts.stable.example.com"
 
 	// 	ctx := context.Background()
-
-	// 	typeNamespacedName := types.NamespacedName{
-	// 		Name:      resourceName,
-	// 		Namespace: "default",
-	// 	}
-	// 	ard := &apiv1alpha1.APIResourceDefinition{}
 
 	// 	BeforeEach(func() {
 	// 		By("creating the custom resource for the Kind APIResourceDefinition")
@@ -317,11 +333,11 @@ func jsonOrDie(obj interface{}) []byte {
 	return ret
 }
 
-func reconcileARD(ctx context.Context, client client.Client, namespacedName types.NamespacedName) {
+func reconcileARD(ctx context.Context, client client.Client, namespacedName types.NamespacedName, recorder record.EventRecorder) {
 	controllerReconciler := &APIResourceDefinitionReconciler{
 		Client:        client,
 		Scheme:        client.Scheme(),
-		EventRecorder: record.NewFakeRecorder(10),
+		EventRecorder: recorder,
 	}
 	_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 		NamespacedName: namespacedName,
