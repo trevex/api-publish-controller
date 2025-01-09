@@ -27,6 +27,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/pkg/errors"
@@ -166,6 +167,65 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 		if err := removeFinalizer(ctx, r.Client, ard, finalizerName); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "unable to remove finalizer")
 		}
+
+		return ctrl.Result{}, nil
+	}
+
+	// resource is not marked for deletion
+
+	// checking, if a finalizer exists on our resource and, if not, add it
+	if !controllerutil.ContainsFinalizer(ard, finalizerName) {
+		logger.Info("adding finalizer")
+		controllerutil.AddFinalizer(ard, finalizerName)
+		if err := r.Update(ctx, ard); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "unable to add finalizer to resource")
+		}
+	}
+
+	// check, if approved APIGroupRequest does exist
+	agr := &apiv1alpha1.APIGroupRequest{}
+	namespacedName := types.NamespacedName{Namespace: ard.Namespace, Name: ard.Spec.APIResourceSchemaSpec.Group}
+
+	if err := r.Get(ctx, namespacedName, agr); err != nil {
+		if apierrors.IsNotFound(err) {
+			// if there is no approved APIGroupRequest found, we write status and event and return
+			condition := metav1.Condition{
+				Type:    "CRDDeployed",
+				Status:  "False",
+				Reason:  "NoApprovedAPIGroupRequestFound",
+				Message: fmt.Sprintf("No APIGroupRequest for API group %s was found, denying request", ard.Spec.APIResourceSchemaSpec.Group),
+			}
+
+			logger.Info("no approved APIGroupRequest found")
+			r.EventRecorder.Eventf(ard, corev1.EventTypeWarning, "RequestDenied", "No APIGroupRequest for API group %s was found, denying request", ard.Spec.APIResourceSchemaSpec.Group)
+
+			if err := updateConditions(ctx, r.Client, req.NamespacedName, agr, &agr.Status.Conditions, condition); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIGroupRequest")
+			}
+
+			return ctrl.Result{}, nil
+		}
+
+		return ctrl.Result{}, errors.Wrap(err, "unable to get APIGroupRequest")
+	}
+
+	if !agr.Status.Approved {
+		// if the APIGroupRequest is not approved, we write status and event and return
+		condition := metav1.Condition{
+			Type:    "CRDDeployed",
+			Status:  "False",
+			Reason:  "APIGroupRequestNotApproved",
+			Message: fmt.Sprintf("APIGroupRequest for API group %s is not approved, denying request", ard.Spec.APIResourceSchemaSpec.Group),
+		}
+
+		logger.Info("APIGroupRequest is not approved")
+		r.EventRecorder.Eventf(ard, corev1.EventTypeWarning, "RequestDenied", "APIGroupRequest for API group %s is not approved, denying request", ard.Spec.APIResourceSchemaSpec.Group)
+
+		if err := updateConditions(ctx, r.Client, req.NamespacedName, agr, &agr.Status.Conditions, condition); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIGroupRequest")
+		}
+
+		return ctrl.Result{}, nil
 	}
 
 	return ctrl.Result{}, nil
