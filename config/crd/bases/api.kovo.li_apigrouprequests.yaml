@@ -36,16 +36,10 @@ spec:
             type: string
           metadata:
             type: object
-          spec:
-            description: APIGroupRequestSpec defines the desired state of APIGroupRequest.
-            type: object
           status:
             description: APIGroupRequestStatus defines the observed state of APIGroupRequest.
             properties:
               approved:
-                description: |-
-                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-                  Important: Run "make" to regenerate code after modifying this file
                 type: boolean
               conditions:
                 items:
