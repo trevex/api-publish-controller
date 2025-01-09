@@ -22,6 +22,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -144,6 +145,10 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIGroupRequest")
 			}
 
+			if err := setApproval(ctx, r.Client, false, agr); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "unable to update approval status of APIGroupRequest")
+			}
+
 			return ctrl.Result{}, nil
 		}
 
@@ -161,6 +166,10 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 			if err := updateConditions(ctx, r.Client, req.NamespacedName, agr, &agr.Status.Conditions, condition); err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIGroupRequest")
+			}
+
+			if err := setApproval(ctx, r.Client, true, agr); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "unable to update approval status of APIGroupRequest")
 			}
 
 			return ctrl.Result{}, nil
@@ -196,7 +205,26 @@ func (r *APIGroupRequestReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIGroupRequest")
 	}
 
+	if err := setApproval(ctx, r.Client, true, agr); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "unable to update approval status of APIGroupRequest")
+	}
+
 	return ctrl.Result{}, nil
+}
+
+// setApproval sets the approval status of the given APIGroupRequest
+func setApproval(ctx context.Context, client client.Client, approved bool, agr *apiv1alpha1.APIGroupRequest) error {
+	if err := client.Get(ctx, types.NamespacedName{Name: agr.Name, Namespace: agr.Namespace}, agr); err != nil {
+		return errors.Wrap(err, "could not update APIGroupRequest")
+	}
+
+	agr.Status.Approved = approved
+
+	if err := client.Status().Update(ctx, agr); err != nil {
+		return errors.Wrap(err, "could not update APIGroupRequest status")
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
