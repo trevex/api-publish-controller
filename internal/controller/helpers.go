@@ -58,6 +58,7 @@ func getOwner(resource client.Object) types.NamespacedName {
 	}
 }
 
+// updateConditions updates the given contition in the given conditions list for the given object with the given (namespaced)Name
 func updateConditions(ctx context.Context, client client.Client, namespacedName types.NamespacedName, obj client.Object, conditions *[]metav1.Condition, condition metav1.Condition) error {
 	if err := client.Get(ctx, namespacedName, obj); err != nil {
 		return errors.Wrap(err, "unable to get resource")
