@@ -81,6 +81,38 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 	clusterRoleName := fmt.Sprintf("%s-role", ard.Name)
 	clusterRoleBindingName := fmt.Sprintf("%s-rolebinding", ard.Name)
 
+	// define ClusterRole and ClusterRoleBinding
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: clusterRoleName,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{ard.Spec.APIResourceSchemaSpec.Group},
+				Resources: []string{ard.Spec.APIResourceSchemaSpec.Names.Plural},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+		},
+	}
+
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: clusterRoleBindingName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      ard.Spec.ServiceAccountRef.Name,
+				Namespace: ard.Namespace,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     clusterRoleName,
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+	}
+
 	// Check, if CRD is already in place
 	logger.Info("fetching CRD")
 	crdExists := false
@@ -196,16 +228,18 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 				Message: fmt.Sprintf("No APIGroupRequest for API group %s was found, denying request", ard.Spec.APIResourceSchemaSpec.Group),
 			}
 
-			logger.Info("no approved APIGroupRequest found")
+			logger.Info("no corresponding APIGroupRequest found")
 			r.EventRecorder.Eventf(ard, corev1.EventTypeWarning, "RequestDenied", "No APIGroupRequest for API group %s was found, denying request", ard.Spec.APIResourceSchemaSpec.Group)
 
-			if err := updateConditions(ctx, r.Client, req.NamespacedName, agr, &agr.Status.Conditions, condition); err != nil {
+			if err := updateConditions(ctx, r.Client, req.NamespacedName, ard, &ard.Status.Conditions, condition); err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIGroupRequest")
 			}
 
+			// we return here, as we cannot continue without an approved APIGroupRequest
 			return ctrl.Result{}, nil
 		}
 
+		// if there was an error while fetching the APIGroupRequest
 		return ctrl.Result{}, errors.Wrap(err, "unable to get APIGroupRequest")
 	}
 
@@ -221,24 +255,124 @@ func (r *APIResourceDefinitionReconciler) Reconcile(ctx context.Context, req ctr
 		logger.Info("APIGroupRequest is not approved")
 		r.EventRecorder.Eventf(ard, corev1.EventTypeWarning, "RequestDenied", "APIGroupRequest for API group %s is not approved, denying request", ard.Spec.APIResourceSchemaSpec.Group)
 
-		if err := updateConditions(ctx, r.Client, req.NamespacedName, agr, &agr.Status.Conditions, condition); err != nil {
+		if err := updateConditions(ctx, r.Client, req.NamespacedName, ard, &ard.Status.Conditions, condition); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIGroupRequest")
 		}
 
 		return ctrl.Result{}, nil
 	}
 
+	// approved APIGroupRequest exists, so we can continue
+
+	// checking for existence of referenced ServiceAccount
+	sa := &corev1.ServiceAccount{}
+	if err := r.Get(ctx, types.NamespacedName{Name: ard.Spec.ServiceAccountRef.Name, Namespace: ard.Namespace}, sa); err != nil {
+		// if ServiceAccount does not exist, we write status and event and return
+		if apierrors.IsNotFound(err) {
+			condition := metav1.Condition{
+				Type:    "CRDDeployed",
+				Status:  "False",
+				Reason:  "ServiceAccountNotFound",
+				Message: fmt.Sprintf("expected ServiceAccount %s not found in namespace %s", ard.Spec.ServiceAccountRef.Name, ard.Namespace),
+			}
+
+			logger.Info("ServiceAccount not found")
+			r.EventRecorder.Eventf(ard, corev1.EventTypeWarning, "RequestDenied", "ServiceAccount %s not found in namespace %s", ard.Spec.ServiceAccountRef.Name, ard.Namespace)
+
+			if err := updateConditions(ctx, r.Client, req.NamespacedName, ard, &ard.Status.Conditions, condition); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIResourceDefinition")
+			}
+
+			return ctrl.Result{}, nil
+		}
+
+		// if there was an error while fetching the ServiceAccount
+		return ctrl.Result{}, errors.Wrap(err, "unable to get ServiceAccount")
+	}
+
+	// ServiceAccount exists, so we can continue
+
+	// checking, if Clusterrole and ClusterRoleBinding exist
+	cr := &rbacv1.ClusterRole{}
+
+	if err := r.Get(ctx, types.NamespacedName{Name: clusterRoleName}, cr); err != nil {
+		if apierrors.IsNotFound(err) {
+			// if ClusterRole does not exist, we create it
+			logger.Info("creating ClusterRole", "ClusterRole", clusterRoleName)
+
+			if err := r.Create(ctx, clusterRole); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "unable to create ClusterRole")
+			}
+		} else {
+			return ctrl.Result{}, errors.Wrap(err, "unable to get ClusterRole")
+		}
+	}
+
+	crb := &rbacv1.ClusterRoleBinding{}
+
+	if err := r.Get(ctx, types.NamespacedName{Name: clusterRoleBindingName}, crb); err != nil {
+		if apierrors.IsNotFound(err) {
+			// if ClusterRoleBinding does not exist, we create it
+			logger.Info("creating ClusterRoleBinding", "ClusterRoleBinding", clusterRoleBindingName)
+
+			if err := r.Create(ctx, clusterRoleBinding); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "unable to create ClusterRoleBinding")
+			}
+		} else {
+			return ctrl.Result{}, errors.Wrap(err, "unable to get ClusterRoleBinding")
+		}
+	}
+
+	// check, if CRD is already in place
+
+	if !crdExists {
+		// if CRD does not exist, we create it
+		logger.Info("creating CRD", "CRD", crdName)
+
+		crd, err := createCRDfromARD(ard)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "unable to create CRD from APIResourceDefinition")
+		}
+
+		if err := r.Create(ctx, crd); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "unable to create CRD")
+		}
+	}
+
+	// we create condition and event for successful creation of CRD
+	condition := metav1.Condition{
+		Type:    "CRDDeployed",
+		Status:  "True",
+		Reason:  "CRDCreated",
+		Message: fmt.Sprintf("CRD %s created successfully", crdName),
+	}
+
+	if err := updateConditions(ctx, r.Client, req.NamespacedName, ard, &ard.Status.Conditions, condition); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "unable to update status of APIResourceDefinition")
+	}
+
+	r.EventRecorder.Eventf(ard, corev1.EventTypeNormal, "CRDCreated", "CRD %s created successfully", crdName)
+
 	return ctrl.Result{}, nil
 }
 
+// createCRDfromARD creates a CustomResourceDefinition (CRD) from an APIResourceDefinition (ARD).
+// It takes an APIResourceDefinition as input and returns a CustomResourceDefinition and an error.
+//
+// Parameters:
+//   - ard: A pointer to an APIResourceDefinition object.
+//
+// Returns:
+//   - *apiextensionsv1.CustomResourceDefinition: A pointer to the created CustomResourceDefinition object.
+//   - error: An error if there is any issue during the creation of the CRD, otherwise nil.
 func createCRDfromARD(ard *apiv1alpha1.APIResourceDefinition) (*apiextensionsv1.CustomResourceDefinition, error) {
 
 	crdVersions := []apiextensionsv1.CustomResourceDefinitionVersion{}
 
 	for _, version := range ard.Spec.APIResourceSchemaSpec.Versions {
 
-		schemaProps := &apiextensionsv1.JSONSchemaProps{}
-		if err := json.Unmarshal(version.Schema.Raw, schemaProps); err != nil {
+		validation := &apiextensionsv1.CustomResourceValidation{}
+		if err := json.Unmarshal(version.Schema.Raw, validation); err != nil {
 			return &apiextensionsv1.CustomResourceDefinition{}, errors.Wrap(err, "could not unmarshal JSONSchemaProps")
 		}
 
@@ -250,9 +384,7 @@ func createCRDfromARD(ard *apiv1alpha1.APIResourceDefinition) (*apiextensionsv1.
 			DeprecationWarning:       version.DeprecationWarning,
 			Subresources:             &version.Subresources,
 			AdditionalPrinterColumns: version.AdditionalPrinterColumns,
-			Schema: &apiextensionsv1.CustomResourceValidation{
-				OpenAPIV3Schema: schemaProps,
-			},
+			Schema:                   validation,
 		}
 
 		crdVersions = append(crdVersions, crdVersion)
