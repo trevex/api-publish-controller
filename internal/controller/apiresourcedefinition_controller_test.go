@@ -82,8 +82,10 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 						Storage: true,
 						Schema: runtime.RawExtension{
 							Raw: jsonOrDie(
-								&apiextensionsv1.JSONSchemaProps{
-									Type: "object",
+								&apiextensionsv1.CustomResourceValidation{
+									OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{
+										Type: "object",
+									},
 								},
 							),
 						},
