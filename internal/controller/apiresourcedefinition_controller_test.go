@@ -47,6 +47,7 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 	const (
 		resourceName      = "shirts.stable.example.com"
 		resourceNamespace = "default"
+		testAPIGroup      = "stable.example.com"
 	)
 
 	var (
@@ -64,11 +65,11 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 	ard := &apiv1alpha1.APIResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      resourceName,
-			Namespace: "default",
+			Namespace: resourceNamespace,
 		},
 		Spec: apiv1alpha1.APIResourceDefinitionSpec{
 			APIResourceSchemaSpec: kcpv1alpha1.APIResourceSchemaSpec{
-				Group: "stable.example.com",
+				Group: testAPIGroup,
 				Scope: apiextensionsv1.NamespaceScoped,
 				Names: apiextensionsv1.CustomResourceDefinitionNames{
 					Plural:   "shirts",
@@ -203,7 +204,6 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 		AfterEach(func() {
 			By("deleting ServiceAccount")
 			Expect(k8sClient.Delete(ctx, sa)).To(Succeed())
-
 		})
 
 		It("should successfully delete the resource", func() {
@@ -254,76 +254,102 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 				events = append(events, event)
 			}
 			Expect(events).To(ContainElement(ContainSubstring("DeletionBlocked")))
+
+			By("Deleting the CR resource")
+			Expect(k8sClient.Delete(ctx, instance)).To(Succeed())
+
+			By("Reconciling again to remove all resources")
+			reconcileARD(ctx, k8sClient, typeNamespacedName, record.NewFakeRecorder(10))
 		})
 	})
 
-	// Context("When reconciling a resource", func() {
+	Context("When reconciling a resource", func() {
 
-	// 	ctx := context.Background()
+		ctx := context.Background()
 
-	// 	BeforeEach(func() {
-	// 		By("creating the custom resource for the Kind APIResourceDefinition")
-	// 		err := k8sClient.Get(ctx, typeNamespacedName, ard)
-	// 		if err != nil && errors.IsNotFound(err) {
-	// 			resource := &apiv1alpha1.APIResourceDefinition{
-	// 				ObjectMeta: metav1.ObjectMeta{
-	// 					Name:      resourceName,
-	// 					Namespace: "default",
-	// 				},
-	// 				Spec: apiv1alpha1.APIResourceDefinitionSpec{
-	// 					APIResourceSchemaSpec: kcpv1alpha1.APIResourceSchemaSpec{
-	// 						Group: "stable.example.com",
-	// 						Scope: apiextensionsv1.NamespaceScoped,
-	// 						Names: apiextensionsv1.CustomResourceDefinitionNames{
-	// 							Plural:   "shirts",
-	// 							Singular: "shirt",
-	// 							Kind:     "Shirt",
-	// 						},
-	// 						Versions: []kcpv1alpha1.APIResourceVersion{
-	// 							{
-	// 								Name:    "v1",
-	// 								Served:  true,
-	// 								Storage: true,
-	// 								Schema: runtime.RawExtension{
-	// 									Raw: jsonOrDie(
-	// 										&apiextensionsv1.JSONSchemaProps{
-	// 											Type: "object",
-	// 										},
-	// 									),
-	// 								},
-	// 							},
-	// 						},
-	// 					},
-	// 				}}
-	// 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-	// 		}
-	// 	})
+		BeforeEach(func() {
+			By("creating the custom resource for the Kind APIResourceDefinition")
+			ardTmp := ard.DeepCopy()
+			err := k8sClient.Get(ctx, typeNamespacedName, ardTmp)
+			if err != nil && errors.IsNotFound(err) {
+				Expect(k8sClient.Create(ctx, ardTmp)).To(Succeed())
+			}
 
-	// 	AfterEach(func() {
-	// 		// TODO(user): Cleanup logic after each test, like removing the resource instance.
-	// 		resource := &apiv1alpha1.APIResourceDefinition{}
-	// 		err := k8sClient.Get(ctx, typeNamespacedName, resource)
-	// 		Expect(err).NotTo(HaveOccurred())
+			By("creating ServiceAccount")
+			saTmp := sa.DeepCopy()
+			Expect(k8sClient.Create(ctx, saTmp)).To(Succeed())
 
-	// 		By("cleanup the specific resource instance APIResourceDefinition")
-	// 		Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-	// 	})
+			By("Creating APIGroupRequest, if necessary")
+			agr := &apiv1alpha1.APIGroupRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      testAPIGroup,
+					Namespace: resourceNamespace,
+				},
+			}
 
-	// 	It("should successfully reconcile the resource", func() {
-	// 		By("reconciling the created resource")
-	// 		controllerReconciler := &APIResourceDefinitionReconciler{
-	// 			Client: k8sClient,
-	// 			Scheme: k8sClient.Scheme(),
-	// 		}
+			namespacedName := types.NamespacedName{
+				Name:      testAPIGroup,
+				Namespace: resourceNamespace,
+			}
+			err = k8sClient.Get(ctx, namespacedName, agr)
 
-	// 		_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-	// 			NamespacedName: typeNamespacedName,
-	// 		})
-	// 		Expect(err).NotTo(HaveOccurred())
-	// 		// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-	// 		// Example: If you expect a certain status condition after reconciliation, verify it here.
-	// 	})
-	// })
+			if err != nil && errors.IsNotFound(err) {
+				Expect(k8sClient.Create(ctx, agr)).To(Succeed())
+				By("Reconciling the APIGroupRequest")
+				reconcileAGR(ctx, k8sClient, namespacedName)
+
+				err = k8sClient.Get(ctx, namespacedName, agr)
+				Expect(err).ToNot(HaveOccurred())
+				checkStatus(agr.Status.Conditions, "APIGroupReserved", "ClusterAPIGroupCreated", BeTrue())
+
+			}
+
+			Expect(err).ToNot(HaveOccurred())
+
+		})
+
+		AfterEach(func() {
+			By("deleting ServiceAccount")
+			Expect(k8sClient.Delete(ctx, sa)).To(Succeed())
+		})
+
+		It("should successfully reconcile the resource", func() {
+			By("reconciling the created resource")
+			eventRecorder := record.NewFakeRecorder(10)
+			reconcileARD(ctx, k8sClient, typeNamespacedName, eventRecorder)
+			close(eventRecorder.Events)
+
+			By("checking, if CRD is created")
+			Eventually(func() bool {
+				crdTmp := &apiextensionsv1.CustomResourceDefinition{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: resourceName}, crdTmp)
+				return err == nil
+			}).Should(BeTrue())
+
+			By("checking, if ClusterRole is created")
+			Eventually(func() bool {
+				crTmp := &rbacv1.ClusterRole{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: crName}, crTmp)
+				return err == nil
+			}).Should(BeTrue())
+
+			By("checking, if ClusterRoleBinding is created")
+			Eventually(func() bool {
+				crbTmp := &rbacv1.ClusterRoleBinding{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: crbName}, crbTmp)
+				return err == nil
+			}).Should(BeTrue())
+
+			By("Checking, if ARD has the correct status")
+			ardTmp := &apiv1alpha1.APIResourceDefinition{}
+			err := k8sClient.Get(ctx, typeNamespacedName, ardTmp)
+			Expect(err).ToNot(HaveOccurred())
+			checkStatus(ardTmp.Status.Conditions, "CRDDeployed", "CRDCreated", BeTrue())
+
+			By("Deleting all created resources again")
+			Expect(k8sClient.Delete(ctx, ard)).To(Succeed())
+		})
+	})
 })
 
 func jsonOrDie(obj interface{}) []byte {
@@ -346,3 +372,5 @@ func reconcileARD(ctx context.Context, client client.Client, namespacedName type
 	})
 	Expect(err).NotTo(HaveOccurred())
 }
+
+// func checkIfResourcesAreGone
