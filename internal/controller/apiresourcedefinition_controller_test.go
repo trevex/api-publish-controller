@@ -164,6 +164,18 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 
 	instance.SetGroupVersionKind(gvk)
 
+	agr := &apiv1alpha1.APIGroupRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testAPIGroup,
+			Namespace: resourceNamespace,
+		},
+	}
+
+	namespacedNameAGR := types.NamespacedName{
+		Name:      testAPIGroup,
+		Namespace: resourceNamespace,
+	}
+
 	Context("reconciling a resource marked for deletion", func() {
 
 		ctx := context.Background()
@@ -280,27 +292,16 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 			Expect(k8sClient.Create(ctx, saTmp)).To(Succeed())
 
 			By("Creating APIGroupRequest, if necessary")
-			agr := &apiv1alpha1.APIGroupRequest{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      testAPIGroup,
-					Namespace: resourceNamespace,
-				},
-			}
-
-			namespacedName := types.NamespacedName{
-				Name:      testAPIGroup,
-				Namespace: resourceNamespace,
-			}
-			err = k8sClient.Get(ctx, namespacedName, agr)
-
+			agrTmp := agr.DeepCopy()
+			err = k8sClient.Get(ctx, namespacedNameAGR, agrTmp)
 			if err != nil && errors.IsNotFound(err) {
 				Expect(k8sClient.Create(ctx, agr)).To(Succeed())
 				By("Reconciling the APIGroupRequest")
-				reconcileAGR(ctx, k8sClient, namespacedName)
+				reconcileAGR(ctx, k8sClient, namespacedNameAGR)
 
-				err = k8sClient.Get(ctx, namespacedName, agr)
+				err = k8sClient.Get(ctx, namespacedNameAGR, agrTmp)
 				Expect(err).ToNot(HaveOccurred())
-				checkStatus(agr.Status.Conditions, "APIGroupReserved", "ClusterAPIGroupCreated", BeTrue())
+				checkStatus(agrTmp.Status.Conditions, "APIGroupReserved", "ClusterAPIGroupCreated", BeTrue())
 
 			}
 
