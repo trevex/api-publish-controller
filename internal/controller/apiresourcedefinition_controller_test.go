@@ -350,6 +350,12 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 
 			By("Deleting all created resources again")
 			Expect(k8sClient.Delete(ctx, ard)).To(Succeed())
+			eventRecorder = record.NewFakeRecorder(10)
+			reconcileARD(ctx, k8sClient, typeNamespacedName, eventRecorder)
+			close(eventRecorder.Events)
+
+		})
+
 		})
 	})
 })
