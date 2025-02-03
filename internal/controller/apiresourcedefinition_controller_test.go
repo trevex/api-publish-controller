@@ -341,11 +341,12 @@ var _ = Describe("APIResourceDefinition Controller", func() {
 				return err == nil
 			}).Should(BeTrue())
 
-			By("Checking, if ARD has the correct status")
+			By("Checking, if ARD has the correct status and finalizer")
 			ardTmp := &apiv1alpha1.APIResourceDefinition{}
 			err := k8sClient.Get(ctx, typeNamespacedName, ardTmp)
 			Expect(err).ToNot(HaveOccurred())
 			checkStatus(ardTmp.Status.Conditions, "CRDDeployed", "CRDCreated", BeTrue())
+			Expect(ardTmp.GetFinalizers()).To(ContainElement(finalizerName))
 
 			By("Deleting all created resources again")
 			Expect(k8sClient.Delete(ctx, ard)).To(Succeed())
